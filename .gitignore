@@ -1,12 +1,5 @@
-﻿# Python & env
-__pycache__/
+﻿__pycache__/
 *.pyc
 .venv/
 venv/
-
-# Training artifacts / large files
-runs/
-dataset/
-merged_yolo_data*/
-*.zip
-*.pt
+.ipynb_checkpoints/
