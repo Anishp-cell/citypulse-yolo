@@ -18,21 +18,22 @@ else:
     print("CUDA not available. Running on CPU.")
 
 # -------------------------
-# Define a simple CNN model
+# Simple CNN (size-agnostic via GAP)
 # -------------------------
 class SimpleCNN(nn.Module):
     def __init__(self):
         super(SimpleCNN, self).__init__()
         self.conv1 = nn.Conv2d(3, 16, 3, padding=1)
         self.conv2 = nn.Conv2d(16, 32, 3, padding=1)
-        self.fc1 = nn.Linear(32 * 64 * 64, 10)
+        self.pool  = nn.MaxPool2d(2)
+        self.gap   = nn.AdaptiveAvgPool2d((1, 1))  # global average pooling
+        self.fc1   = nn.Linear(32, 10)             # 32 channels -> 10 classes
 
     def forward(self, x):
-        x = F.relu(self.conv1(x))
-        x = F.max_pool2d(x, 2)
-        x = F.relu(self.conv2(x))
-        x = F.max_pool2d(x, 2)
-        x = x.view(x.size(0), -1)
+        x = F.relu(self.conv1(x)); x = self.pool(x)  # 1/2 size
+        x = F.relu(self.conv2(x)); x = self.pool(x)  # 1/4 size
+        x = self.gap(x)                               # -> [B, 32, 1, 1]
+        x = torch.flatten(x, 1)                       # -> [B, 32]
         x = self.fc1(x)
         return x
 
@@ -95,23 +96,26 @@ print("2. Live camera")
 choice = input("Enter 1 or 2: ")
 
 if choice == "1":
-    dataset_folder = r"D:\python\citypulse\merged_yolo_dataset\images\val"  # Change this to your dataset folder path
+    dataset_folder = r"D:\python\citypulse\merged_yolo_dataset\images\val"  # Change if needed
     if not os.path.exists(dataset_folder):
         print(f"Dataset folder '{dataset_folder}' not found.")
     else:
-        images = [f for f in os.listdir(dataset_folder) if f.endswith(('.jpg', '.png', '.jpeg'))]
+        images = [f for f in os.listdir(dataset_folder) if f.lower().endswith(('.jpg', '.png', '.jpeg'))]
         if len(images) == 0:
             print("No images found in dataset folder.")
         else:
             print("\nAvailable images:")
             for i, img_name in enumerate(images):
                 print(f"{i+1}. {img_name}")
-            img_choice = int(input("Choose image number: ")) - 1
-            if 0 <= img_choice < len(images):
-                image_path = os.path.join(dataset_folder, images[img_choice])
-                test_image(image_path)
-            else:
-                print("Invalid choice.")
+            try:
+                img_choice = int(input("Choose image number: ")) - 1
+                if 0 <= img_choice < len(images):
+                    image_path = os.path.join(dataset_folder, images[img_choice])
+                    test_image(image_path)
+                else:
+                    print("Invalid choice.")
+            except ValueError:
+                print("Please enter a valid number.")
 elif choice == "2":
     test_camera()
 else:
