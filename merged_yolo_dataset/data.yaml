@@ -1,0 +1,11 @@
+names:
+- no_accident
+- minor_accident
+- moderate_accident
+- severe_accident
+- totaled_vehicle
+- pothole
+nc: 6
+path: D:\python\citypulse\merged_yolo_dataset
+train: images/train
+val: images/val
