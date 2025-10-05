@@ -5,4 +5,5 @@ opencv-python-headless
 numpy
 torch           # install the right wheel locally; Railway will also install
 onnxruntime     # ok even if you use .pt
-
+streamlit
+openai
