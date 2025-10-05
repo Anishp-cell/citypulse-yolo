@@ -3,5 +3,6 @@ uvicorn
 ultralytics==8.3.0
 opencv-python-headless
 numpy
-torch
-onnxruntime
+torch           # install the right wheel locally; Railway will also install
+onnxruntime     # ok even if you use .pt
+
