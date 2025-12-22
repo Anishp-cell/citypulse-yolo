@@ -1,9 +1,9 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 fastapi
 uvicorn
 ultralytics==8.3.0
-opencv-python-headless
+opencv-python-headless==4.10.0.84
 numpy
-torch           # install the right wheel locally; Railway will also install
-onnxruntime     # ok even if you use .pt
-streamlit
-openai
+onnxruntime==1.18.1
+torch==2.3.1
