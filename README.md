@@ -72,7 +72,7 @@ Integrated Mistral for personalized medical guidance.
 ![NumPy](https://img.shields.io/badge/NumPy-013243?style=for-the-badge&logo=numpy&logoColor=white)
 ![Pandas](https://img.shields.io/badge/Pandas-150458?style=for-the-badge&logo=pandas&logoColor=white)
 
-## 🤝 Impact Potential
+##  Impact Potential
 
 CityPulse is more than detection — it’s a comprehensive emergency response ecosystem that:
 1. **Reduces emergency response time** via automation
@@ -81,4 +81,4 @@ CityPulse is more than detection — it’s a comprehensive emergency response e
 4. **Scales to city-wide deployment** for smart infrastructure
 
 ---
-*Built with ❤️ for safer cities.*
+Built with for safer cities.
