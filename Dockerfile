@@ -5,10 +5,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# System libs needed by OpenCV/ONNXRuntime
+# System libs needed by OpenCV + video codecs
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1 libglib2.0-0 libgomp1 \
- && rm -rf /var/lib/apt/lists/*
+    libgl1 libglib2.0-0 libgomp1 ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -16,9 +16,12 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && pip cache purge
 
-# Copy app
-COPY . .
+# Copy application code
+COPY backend/ backend/
+COPY frontend/ frontend/
+COPY runs_citypulse/yolov8n_pothole_vbest2/weights/best.pt runs_citypulse/yolov8n_pothole_vbest2/weights/best.pt
+COPY runs_citypulse/yolov8n_pothole_vbest2/args.yaml runs_citypulse/yolov8n_pothole_vbest2/args.yaml
 
-# Expose (Railway sets $PORT; default 8080 for local)
+# Expose port (Cloud Run sets $PORT; default 8080)
 ENV PORT=8080
-CMD ["sh","-c","uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["sh", "-c", "cd /app && uvicorn backend.main:app --host 0.0.0.0 --port ${PORT}"]

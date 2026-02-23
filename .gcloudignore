@@ -1,0 +1,27 @@
+# This file tells gcloud which files to skip when uploading for Cloud Build.
+#include:.gitignore
+
+data/
+runs/
+venv/
+.venv/
+blobs/
+.git/
+__pycache__/
+*.pyc
+dataset.zip
+ml_scripts/
+yolo11n.pt
+yolov8m.pt
+yolov8n.pt
+*.ipynb
+*.zip
+manifests/
+
+# Keep only best.pt weights, exclude training artifacts
+runs_citypulse/yolov8n_pothole_vbest/
+runs_citypulse/yolov8n_pothole_vbest2/*.png
+runs_citypulse/yolov8n_pothole_vbest2/*.jpg
+runs_citypulse/yolov8n_pothole_vbest2/*.csv
+runs_citypulse/yolov8n_pothole_vbest2/weights/last.pt
+runs_citypulse/yolov8n_pothole_vbest2/weights/best.onnx

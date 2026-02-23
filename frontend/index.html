@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CityPulse — AI Road Safety</title>
+    <meta name="description"
+        content="CityPulse uses AI-powered computer vision to detect road accidents and potholes in real time, providing severity-based emergency guidance.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/frontend/style.css">
+</head>
+
+<body>
+    <!-- HEADER -->
+    <header class="header">
+        <div class="header-inner">
+            <div class="logo">
+                <span class="logo-icon">🚨</span>
+                <span class="logo-text">CityPulse</span>
+            </div>
+            <nav class="nav-pills">
+                <a href="#upload" class="nav-pill active">Analyze</a>
+                <a href="#how-it-works" class="nav-pill">How It Works</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- HERO -->
+    <section class="hero">
+        <div class="hero-glow"></div>
+        <h1 class="hero-title">AI-Powered <span class="gradient-text">Road Safety</span></h1>
+        <p class="hero-subtitle">Upload an image or video of a road scene. Our YOLO-based AI detects accidents &amp;
+            potholes in real time and provides life-saving emergency guidance.</p>
+        <div class="hero-badges">
+            <span class="badge badge-blue">YOLOv8 Detection</span>
+            <span class="badge badge-purple">6-Class Model</span>
+            <span class="badge badge-amber">Image &amp; Video</span>
+            <span class="badge badge-green">Gemini AI Guidance</span>
+        </div>
+    </section>
+
+    <!-- UPLOAD SECTION -->
+    <section id="upload" class="section">
+        <div class="container">
+            <div class="upload-card glass-card" id="uploadCard">
+                <!-- Mode Toggle -->
+                <div class="mode-toggle" id="modeToggle">
+                    <button class="mode-btn active" data-mode="image" id="modeImageBtn">📷 Image</button>
+                    <button class="mode-btn" data-mode="video" id="modeVideoBtn">🎥 Video</button>
+                </div>
+
+                <div class="upload-zone" id="uploadZone">
+                    <div class="upload-icon">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="17 8 12 3 7 8" />
+                            <line x1="12" y1="3" x2="12" y2="15" />
+                        </svg>
+                    </div>
+                    <p class="upload-text" id="uploadText">Drag &amp; drop an image or video here</p>
+                    <p class="upload-hint" id="uploadHint">or click to browse — JPG, PNG, MP4, AVI, MOV supported</p>
+                    <input type="file" id="fileInput"
+                        accept="image/*,video/mp4,video/avi,video/quicktime,video/x-matroska,video/webm" hidden>
+                </div>
+
+                <!-- Image Preview -->
+                <div class="preview-area" id="previewArea" style="display:none;">
+                    <img id="previewImage" alt="Preview">
+                    <button class="btn btn-ghost btn-sm" id="clearBtn">✕ Clear</button>
+                </div>
+
+                <!-- Video Preview -->
+                <div class="preview-area" id="videoPreviewArea" style="display:none;">
+                    <video id="previewVideo" controls muted
+                        style="max-height:360px;width:100%;border-radius:var(--radius-sm);"></video>
+                    <button class="btn btn-ghost btn-sm" id="videoClearBtn">✕ Clear</button>
+                </div>
+
+                <button class="btn btn-primary btn-lg" id="analyzeBtn" disabled>
+                    <span class="btn-text" id="analyzeBtnText">Analyze</span>
+                    <span class="btn-loader" style="display:none;">
+                        <span class="spinner"></span> <span id="analyzeLoaderText">Analyzing…</span>
+                    </span>
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- RESULTS SECTION -->
+    <section id="results" class="section" style="display:none;">
+        <div class="container">
+            <h2 class="section-title">Analysis Results</h2>
+
+            <!-- Severity Banner -->
+            <div class="severity-banner" id="severityBanner">
+                <div class="severity-icon" id="severityIcon"></div>
+                <div class="severity-info">
+                    <span class="severity-label" id="severityLabel"></span>
+                    <span class="severity-class" id="severityClass"></span>
+                </div>
+            </div>
+
+            <!-- Video Info Bar (hidden for images) -->
+            <div class="video-stats glass-card" id="videoStats" style="display:none;">
+                <div class="stat"><span class="stat-val" id="statDuration">—</span><span
+                        class="stat-label">Duration</span></div>
+                <div class="stat"><span class="stat-val" id="statFrames">—</span><span class="stat-label">Frames
+                        Analyzed</span></div>
+                <div class="stat"><span class="stat-val" id="statIncidents">—</span><span class="stat-label">Incidents
+                        Found</span></div>
+                <div class="stat"><span class="stat-val" id="statFps">—</span><span class="stat-label">Video FPS</span>
+                </div>
+            </div>
+
+            <!-- Timeline (video only) -->
+            <div class="glass-card timeline-card" id="timelineCard" style="display:none;">
+                <h3>Incident Timeline</h3>
+                <div id="timelineContent" class="timeline-list"></div>
+            </div>
+
+            <!-- Two-column: Image + Detections -->
+            <div class="results-grid">
+                <div class="glass-card result-image-card">
+                    <h3 id="resultImageTitle">Annotated Image</h3>
+                    <img id="resultImage" alt="Annotated detection result">
+                </div>
+                <div class="glass-card result-detections-card">
+                    <h3>Detections</h3>
+                    <div id="detectionsList" class="detections-list"></div>
+
+                    <!-- Notify -->
+                    <div class="notify-section" id="notifySection" style="display:none;">
+                        <h4>Report Incident</h4>
+                        <input type="text" id="locationInput" placeholder="Enter approximate location…" class="input">
+                        <button class="btn btn-warning" id="notifyBtn">
+                            <span class="btn-text">🔔 Send Alert</span>
+                            <span class="btn-loader" style="display:none;">
+                                <span class="spinner"></span> Sending…
+                            </span>
+                        </button>
+                        <p class="notify-status" id="notifyStatus"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Guidance -->
+            <div class="glass-card guidance-card" id="guidanceCard" style="display:none;">
+                <h3>Emergency Guidance</h3>
+                <div id="guidanceContent"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section id="how-it-works" class="section section-alt">
+        <div class="container">
+            <h2 class="section-title">How It Works</h2>
+            <p class="section-desc">CityPulse combines state-of-the-art computer vision with AI-powered guidance to
+                create an end-to-end road safety pipeline.</p>
+
+            <!-- Pipeline Steps -->
+            <div class="pipeline">
+                <div class="pipeline-step glass-card">
+                    <div class="step-header">
+                        <div class="step-num">1</div>
+                        <div class="step-icon-lg">📸</div>
+                    </div>
+                    <h4>Upload Image</h4>
+                    <p class="step-desc">Upload any road scene image — dashcam footage, phone photos, or traffic camera
+                        stills. The system accepts JPG and PNG formats of any resolution.</p>
+                    <div class="step-details">
+                        <span class="detail-tag">Drag &amp; Drop</span>
+                        <span class="detail-tag">Any Resolution</span>
+                        <span class="detail-tag">JPG / PNG</span>
+                    </div>
+                </div>
+
+                <div class="pipeline-arrow">→</div>
+
+                <div class="pipeline-step glass-card">
+                    <div class="step-header">
+                        <div class="step-num">2</div>
+                        <div class="step-icon-lg">🔍</div>
+                    </div>
+                    <h4>YOLOv8 Detection</h4>
+                    <p class="step-desc">A custom-trained YOLOv8n model processes the image in real time. It localizes
+                        and classifies incidents using bounding boxes across 6 distinct severity classes.</p>
+                    <div class="step-details">
+                        <span class="detail-tag">Custom YOLOv8n</span>
+                        <span class="detail-tag">25+ FPS</span>
+                        <span class="detail-tag">6 Classes</span>
+                    </div>
+                </div>
+
+                <div class="pipeline-arrow">→</div>
+
+                <div class="pipeline-step glass-card">
+                    <div class="step-header">
+                        <div class="step-num">3</div>
+                        <div class="step-icon-lg">🧠</div>
+                    </div>
+                    <h4>AI Guidance</h4>
+                    <p class="step-desc">Based on the detected severity, our system generates personalized emergency
+                        guidance using Gemini AI — providing clear, actionable first-aid steps for bystanders.</p>
+                    <div class="step-details">
+                        <span class="detail-tag">Gemini 2.0 Flash</span>
+                        <span class="detail-tag">Severity-Mapped</span>
+                        <span class="detail-tag">&lt; 2s Response</span>
+                    </div>
+                </div>
+
+                <div class="pipeline-arrow">→</div>
+
+                <div class="pipeline-step glass-card">
+                    <div class="step-header">
+                        <div class="step-num">4</div>
+                        <div class="step-icon-lg">🚨</div>
+                    </div>
+                    <h4>Alert &amp; Report</h4>
+                    <p class="step-desc">One-click notification system alerts emergency services for accidents or
+                        municipal departments for potholes — with annotated images and location data attached.</p>
+                    <div class="step-details">
+                        <span class="detail-tag">Emergency 108</span>
+                        <span class="detail-tag">Municipal Dept</span>
+                        <span class="detail-tag">Auto-Docs</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Detection Classes -->
+            <div class="classes-section">
+                <h3 class="subsection-title">Detection Classes</h3>
+                <p class="section-desc">Our model detects and classifies road incidents into 6 distinct categories, each
+                    mapped to a specific severity level and response protocol.</p>
+                <div class="classes-grid">
+                    <div class="class-chip class-chip-green">
+                        <span class="class-dot" style="background:#22c55e"></span>
+                        <span class="class-name">No Accident</span>
+                        <span class="class-level">Safe</span>
+                    </div>
+                    <div class="class-chip class-chip-yellow">
+                        <span class="class-dot" style="background:#f59e0b"></span>
+                        <span class="class-name">Minor</span>
+                        <span class="class-level">Level 1</span>
+                    </div>
+                    <div class="class-chip class-chip-orange">
+                        <span class="class-dot" style="background:#f97316"></span>
+                        <span class="class-name">Moderate</span>
+                        <span class="class-level">Level 2</span>
+                    </div>
+                    <div class="class-chip class-chip-red">
+                        <span class="class-dot" style="background:#ef4444"></span>
+                        <span class="class-name">Severe</span>
+                        <span class="class-level">Level 3</span>
+                    </div>
+                    <div class="class-chip class-chip-darkred">
+                        <span class="class-dot" style="background:#dc2626"></span>
+                        <span class="class-name">Totaled</span>
+                        <span class="class-level">Level 4</span>
+                    </div>
+                    <div class="class-chip class-chip-cyan">
+                        <span class="class-dot" style="background:#06b6d4"></span>
+                        <span class="class-name">Pothole</span>
+                        <span class="class-level">Infra</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tech Stack -->
+            <div class="tech-section">
+                <h3 class="subsection-title">Tech Stack</h3>
+                <div class="tech-grid">
+                    <div class="tech-item glass-card">
+                        <strong>YOLOv8</strong>
+                        <span>Object Detection</span>
+                    </div>
+                    <div class="tech-item glass-card">
+                        <strong>PyTorch</strong>
+                        <span>Deep Learning</span>
+                    </div>
+                    <div class="tech-item glass-card">
+                        <strong>Gemini AI</strong>
+                        <span>LLM Guidance</span>
+                    </div>
+                    <div class="tech-item glass-card">
+                        <strong>FastAPI</strong>
+                        <span>Backend API</span>
+                    </div>
+                    <div class="tech-item glass-card">
+                        <strong>OpenCV</strong>
+                        <span>Image Processing</span>
+                    </div>
+                    <div class="tech-item glass-card">
+                        <strong>Cloud Run</strong>
+                        <span>Deployment</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+        <p>CityPulse — Built with ❤️ for safer cities</p>
+    </footer>
+
+    <script src="/frontend/app.js"></script>
+</body>
+
+</html>
