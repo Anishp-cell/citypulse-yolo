@@ -1,7 +1,12 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
+from sqlalchemy.orm import Session
+from backend.database import engine, get_db, Base
+from backend.models import Incident
+from backend.routes import auth
+from backend.dependencies import get_current_user, require_officer_or_admin, require_citizen, User  # For role-based protection
 import shutil
 import os
 import cv2
@@ -48,7 +53,13 @@ if FRONTEND_DIR.exists():
 print(f"Initializing Service with weights: {WEIGHTS_PATH}")
 service = TrafficSafetyService(weights_path=WEIGHTS_PATH)
 
+# Initialize Database
+print("Initializing Database...")
+Base.metadata.create_all(bind=engine)
+
 # --- ROUTES ---
+# Include auth router
+app.include_router(auth.router)
 
 @app.get("/health")
 def health():
@@ -62,7 +73,12 @@ def home():
     return {"message": "✅ CityPulse Backend is Running", "docs": "/docs"}
 
 @app.post("/api/analyze")
-async def analyze_image(file: UploadFile = File(...)):
+async def analyze_image(
+    file: UploadFile = File(...), 
+    location: str = Form(None), 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user) # Requires ANY logged in user (citizen, officer, or admin)
+):
     """Upload an image for analysis. Returns detections, guidance, and annotated image URL."""
     try:
         file_ext = file.filename.split('.')[-1]
@@ -84,8 +100,22 @@ async def analyze_image(file: UploadFile = File(...)):
 
         image_url = f"/static/processed/{processed_filename}"
 
+        # Save to DB
+        db_incident = Incident(
+            image_url=image_url,
+            severity=result["highest_severity"],
+            detection_results=result["detections"],
+            guidance=result["guidance"],
+            address_text=location,
+            reported_by=current_user.id
+        )
+        db.add(db_incident)
+        db.commit()
+        db.refresh(db_incident)
+
         return {
             "success": True,
+            "incident_id": db_incident.id,
             "image_url": image_url,
             "detections": result["detections"],
             "highest_severity": result["highest_severity"],
@@ -101,7 +131,12 @@ VIDEO_DIR = Path("static/videos")
 VIDEO_DIR.mkdir(parents=True, exist_ok=True)
 
 @app.post("/api/analyze-video")
-async def analyze_video(file: UploadFile = File(...)):
+async def analyze_video(
+    file: UploadFile = File(...), 
+    location: str = Form(None), 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user) # Requires ANY logged in user
+):
     """Upload a video for analysis. Returns aggregated detections, timeline, keyframe, and guidance."""
     try:
         file_ext = file.filename.split('.')[-1].lower()
@@ -128,8 +163,23 @@ async def analyze_video(file: UploadFile = File(...)):
 
         image_url = f"/static/processed/{keyframe_filename}"
 
+        # Save to DB
+        db_incident = Incident(
+            video_url=f"/static/videos/{filename}",
+            image_url=image_url,
+            severity=result["highest_severity"],
+            detection_results=result["detections"],
+            guidance=result["guidance"],
+            address_text=location,
+            reported_by=current_user.id
+        )
+        db.add(db_incident)
+        db.commit()
+        db.refresh(db_incident)
+
         return {
             "success": True,
+            "incident_id": db_incident.id,
             "image_url": image_url,
             "detections": result["detections"],
             "highest_severity": result["highest_severity"],
@@ -146,7 +196,10 @@ async def analyze_video(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/notify")
-async def send_notification(data: dict):
+async def send_notification(
+    data: dict,
+    current_user: User = Depends(require_officer_or_admin) # Only officers/admins can manually push notifications
+):
     """Trigger a simulated notification. Expects: {"type": "accident"|"pothole", "location": "string"}"""
     detection_type = data.get("type")
     location = data.get("location")
