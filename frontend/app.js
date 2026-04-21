@@ -16,6 +16,14 @@ const resultsSection = document.getElementById('results');
 
 let selectedFile = null;
 let currentMode = 'image'; // 'image' or 'video'
+let currentIncidentId = null;
+
+// ───────── Auth State ─────────
+let authToken = localStorage.getItem('cp_token') || null;
+
+function getAuthHeaders() {
+    return authToken ? { 'Authorization': `Bearer ${authToken}` } : {};
+}
 
 // ───────── Mode Toggle ─────────
 
@@ -119,9 +127,15 @@ analyzeBtn.addEventListener('click', async () => {
     formData.append('file', selectedFile);
 
     try {
-        const res = await fetch(`${API_BASE}${endpoint}`, { method: 'POST', body: formData });
+        const res = await fetch(`${API_BASE}${endpoint}`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: formData
+        });
+        if (res.status === 401) { showAuthModal(); throw new Error('Please sign in to continue.'); }
         if (!res.ok) throw new Error(`Server error ${res.status}`);
         const data = await res.json();
+        currentIncidentId = data.incident_id || null;
         renderResults(data, isVideo);
     } catch (err) {
         alert('Analysis failed: ' + err.message);
@@ -301,9 +315,10 @@ document.getElementById('notifyBtn').addEventListener('click', async () => {
     try {
         const res = await fetch(`${API_BASE}/api/notify`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type, location: loc })
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+            body: JSON.stringify({ type, location: loc, incident_id: currentIncidentId })
         });
+        if (res.status === 401) { showAuthModal(); return; }
         const data = await res.json();
         status.textContent = data.message || 'Notification sent.';
         status.className = 'notify-status';
@@ -330,3 +345,184 @@ function setBtnLoading(btn, loading) {
         btn.disabled = false;
     }
 }
+
+// ───────── Auth Modal ─────────
+
+function showAuthModal() {
+    document.getElementById('authModal').style.display = 'flex';
+}
+
+function hideAuthModal() {
+    document.getElementById('authModal').style.display = 'none';
+}
+
+function switchAuthTab(tab) {
+    document.getElementById('loginForm').style.display = tab === 'login' ? 'block' : 'none';
+    document.getElementById('registerForm').style.display = tab === 'register' ? 'block' : 'none';
+    document.getElementById('loginTab').classList.toggle('active', tab === 'login');
+    document.getElementById('registerTab').classList.toggle('active', tab === 'register');
+}
+
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector('button[type=submit]');
+    const errEl = document.getElementById('loginError');
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    setBtnLoading(btn, true);
+    errEl.textContent = '';
+    try {
+        const res = await fetch('/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ username: email, password }).toString(),
+        });
+        const data = await res.json();
+        if (!res.ok) { errEl.textContent = data.detail || 'Invalid credentials'; return; }
+        authToken = data.access_token;
+        localStorage.setItem('cp_token', authToken);
+        hideAuthModal();
+        onAuthSuccess();
+    } catch (err) {
+        errEl.textContent = 'Login failed. Try again.';
+    } finally {
+        setBtnLoading(btn, false);
+    }
+});
+
+document.getElementById('registerForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector('button[type=submit]');
+    const errEl = document.getElementById('registerError');
+    const email = document.getElementById('regEmail').value.trim();
+    const password = document.getElementById('regPassword').value;
+    const phone = document.getElementById('regPhone').value.trim();
+    setBtnLoading(btn, true);
+    errEl.textContent = '';
+    try {
+        const res = await fetch('/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password, phone: phone || null, role: 'citizen' }),
+        });
+        const data = await res.json();
+        if (!res.ok) { errEl.textContent = data.detail || 'Registration failed'; return; }
+        // Auto-login after register
+        const lr = await fetch('/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ username: email, password }).toString(),
+        });
+        const ld = await lr.json();
+        if (lr.ok) {
+            authToken = ld.access_token;
+            localStorage.setItem('cp_token', authToken);
+            hideAuthModal();
+            onAuthSuccess();
+        } else {
+            switchAuthTab('login');
+            document.getElementById('loginEmail').value = email;
+        }
+    } catch (err) {
+        errEl.textContent = 'Registration failed. Try again.';
+    } finally {
+        setBtnLoading(btn, false);
+    }
+});
+
+function logout() {
+    authToken = null;
+    currentIncidentId = null;
+    localStorage.removeItem('cp_token');
+    document.getElementById('logoutBtn').style.display = 'none';
+    document.getElementById('historyNavPill').style.display = 'none';
+    document.getElementById('userInfo').textContent = '';
+    document.getElementById('history').style.display = 'none';
+    resetUpload();
+    showAuthModal();
+}
+
+function onAuthSuccess() {
+    document.getElementById('logoutBtn').style.display = 'inline-flex';
+    document.getElementById('historyNavPill').style.display = 'inline-flex';
+    fetch('/auth/me', { headers: getAuthHeaders() })
+        .then(r => r.json())
+        .then(data => { document.getElementById('userInfo').textContent = data.email || ''; })
+        .catch(() => {});
+}
+
+// ───────── Incident History ─────────
+
+async function loadHistory() {
+    const section = document.getElementById('history');
+    section.style.display = 'block';
+    section.scrollIntoView({ behavior: 'smooth' });
+
+    const loadingEl = document.getElementById('historyLoading');
+    const listEl = document.getElementById('historyList');
+    const emptyEl = document.getElementById('historyEmpty');
+
+    loadingEl.style.display = 'flex';
+    listEl.innerHTML = '';
+    emptyEl.style.display = 'none';
+
+    try {
+        const res = await fetch('/api/incidents?limit=20', { headers: getAuthHeaders() });
+        if (res.status === 401) { showAuthModal(); return; }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+
+        loadingEl.style.display = 'none';
+        if (!data.incidents || data.incidents.length === 0) {
+            emptyEl.style.display = 'block';
+            return;
+        }
+
+        data.incidents.forEach(inc => {
+            const meta = SEVERITY_MAP[inc.severity] || { dot: '#64748b', label: inc.severity };
+            const date = inc.created_at ? new Date(inc.created_at).toLocaleString() : 'Unknown';
+            const el = document.createElement('div');
+            el.className = 'history-item glass-card fade-up';
+            el.innerHTML = `
+                <div class="history-img">
+                    ${inc.image_url
+                        ? `<img src="${inc.image_url}" alt="Incident ${inc.id}" loading="lazy">`
+                        : '<div class="history-no-img">📷</div>'}
+                </div>
+                <div class="history-info">
+                    <div class="history-severity">
+                        <span class="det-dot" style="background:${meta.dot};flex-shrink:0;"></span>
+                        <span>${(meta.label || inc.severity).replace(/_/g, ' ')}</span>
+                    </div>
+                    <p class="history-location">${inc.address_text || 'Location not set'}</p>
+                    <p class="history-date">${date}</p>
+                </div>
+                <div class="history-status">
+                    <span class="status-badge status-${inc.status || 'detected'}">${(inc.status || 'detected').replace(/_/g, ' ')}</span>
+                </div>
+            `;
+            listEl.appendChild(el);
+        });
+
+        if (data.total > 20) {
+            const more = document.createElement('p');
+            more.className = 'no-detections';
+            more.style.marginTop = '.75rem';
+            more.textContent = `Showing 20 of ${data.total} total incidents.`;
+            listEl.appendChild(more);
+        }
+    } catch (err) {
+        loadingEl.style.display = 'none';
+        listEl.innerHTML = `<p class="no-detections" style="color:var(--red)">Failed to load history: ${err.message}</p>`;
+    }
+}
+
+// ───────── Page Init ─────────
+
+(function init() {
+    if (!authToken) {
+        showAuthModal();
+    } else {
+        onAuthSuccess();
+    }
+})();

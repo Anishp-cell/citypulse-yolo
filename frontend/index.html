@@ -15,6 +15,36 @@
 </head>
 
 <body>
+    <!-- AUTH MODAL -->
+    <div id="authModal" class="modal-overlay">
+        <div class="modal-card glass-card">
+            <div class="modal-logo"><span>🚨</span> CityPulse</div>
+            <p class="modal-subtitle">Sign in to analyze road incidents</p>
+            <div class="auth-tabs">
+                <button class="auth-tab active" id="loginTab" onclick="switchAuthTab('login')">Sign In</button>
+                <button class="auth-tab" id="registerTab" onclick="switchAuthTab('register')">Register</button>
+            </div>
+            <form id="loginForm" class="auth-form">
+                <input type="email" id="loginEmail" placeholder="Email" class="input" required>
+                <input type="password" id="loginPassword" placeholder="Password" class="input" required>
+                <button type="submit" class="btn btn-primary btn-lg" style="width:100%">
+                    <span class="btn-text">Sign In</span>
+                    <span class="btn-loader" style="display:none;"><span class="spinner"></span> Signing in…</span>
+                </button>
+                <p id="loginError" class="auth-error"></p>
+            </form>
+            <form id="registerForm" class="auth-form" style="display:none;">
+                <input type="email" id="regEmail" placeholder="Email" class="input" required>
+                <input type="password" id="regPassword" placeholder="Password (min 8 chars)" class="input" required minlength="8">
+                <input type="tel" id="regPhone" placeholder="Phone (optional)" class="input">
+                <button type="submit" class="btn btn-primary btn-lg" style="width:100%">
+                    <span class="btn-text">Create Account</span>
+                    <span class="btn-loader" style="display:none;"><span class="spinner"></span> Creating…</span>
+                </button>
+                <p id="registerError" class="auth-error"></p>
+            </form>
+        </div>
+    </div>
     <!-- HEADER -->
     <header class="header">
         <div class="header-inner">
@@ -22,10 +52,15 @@
                 <span class="logo-icon">🚨</span>
                 <span class="logo-text">CityPulse</span>
             </div>
-            <nav class="nav-pills">
-                <a href="#upload" class="nav-pill active">Analyze</a>
-                <a href="#how-it-works" class="nav-pill">How It Works</a>
-            </nav>
+            <div style="display:flex;align-items:center;gap:.75rem;">
+                <span class="user-info" id="userInfo"></span>
+                <nav class="nav-pills">
+                    <a href="#upload" class="nav-pill active">Analyze</a>
+                    <a href="#history" class="nav-pill" id="historyNavPill" onclick="loadHistory()" style="display:none;">History</a>
+                    <a href="#how-it-works" class="nav-pill">How It Works</a>
+                    <button class="nav-pill nav-pill-logout" id="logoutBtn" onclick="logout()" style="display:none;">Sign Out</button>
+                </nav>
+            </div>
         </div>
     </header>
 
@@ -153,6 +188,18 @@
                 <h3>Emergency Guidance</h3>
                 <div id="guidanceContent"></div>
             </div>
+        </div>
+    </section>
+
+    <!-- INCIDENT HISTORY -->
+    <section id="history" class="section" style="display:none;">
+        <div class="container">
+            <h2 class="section-title">Incident History</h2>
+            <div id="historyLoading" class="history-loading" style="display:none;">
+                <span class="spinner"></span> Loading incidents…
+            </div>
+            <div id="historyList" class="history-list"></div>
+            <p id="historyEmpty" class="no-detections" style="display:none;">No incidents reported yet.</p>
         </div>
     </section>
 
