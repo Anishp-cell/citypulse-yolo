@@ -102,6 +102,7 @@ User / Field Officer
 | `GET` | `/api/incidents` | JWT | List incidents (RBAC) |
 | `GET` | `/api/incidents/{id}` | JWT | Get incident detail |
 | `PATCH` | `/api/incidents/{id}/status` | Officer/Admin | Update status |
+| `GET` | `/api/stats` | JWT | Aggregated stats (totals, severity, status, daily 7-day) |
 | `GET` | `/health` | None | Health check |
 | `GET` | `/docs` | None | Swagger UI |
 
@@ -159,7 +160,23 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 
 Open http://localhost:8000 — you will be prompted to register or sign in.
 
-### 4. Docker
+### 4. Seed demo data (optional)
+
+Populate the database with 40 realistic incidents across major world cities for demos and testing:
+
+```bash
+python scripts/seed_demo.py
+```
+
+This creates a demo officer account (`demo@citypulse.ai` / `DemoPass123!`) and inserts incidents with varied severities, statuses, and timestamps spread over the last 30 days. Override defaults via env vars:
+
+```env
+SEED_USER_EMAIL=your@email.com
+SEED_USER_PASSWORD=YourPass!
+SEED_COUNT=60
+```
+
+### 5. Docker
 
 ```bash
 docker build -t citypulse .
@@ -176,6 +193,20 @@ docker run -p 8000:8000 --env-file .env citypulse
 - File upload validation: type checking + 50 MB image / 500 MB video size limits
 - All secrets via environment variables — never hardcoded
 - Startup warning emitted if default `SECRET_KEY` is still in use
+
+---
+
+## Admin Dashboard
+
+After logging in, click **Dashboard** in the nav bar to access the live analytics view:
+
+- **Stat tiles** — Total incidents, Open, Resolved, Critical (severe + totaled) counts
+- **Severity chart** — Doughnut breakdown across all 6 detection classes
+- **Status pipeline chart** — Doughnut showing detected → notified → acknowledged → resolved → closed
+- **7-day activity bar chart** — Daily incident volume over the past week
+- **Live incident map** — Leaflet map with color-coded circle markers per severity; click any pin for details
+
+All charts and the map update on each Dashboard visit by calling `GET /api/stats` and `GET /api/incidents`.
 
 ---
 
@@ -201,7 +232,7 @@ Citizen access is always free — funded by the government contract.
 - [ ] Multi-language support (auto-detect locale, translate guidance)
 - [ ] Model retraining pipeline from live incident data (target mAP@50 > 0.75)
 - [ ] Government API integrations (emergency dispatch, road management systems)
-- [ ] Admin analytics dashboard with incident heatmaps
+- [x] Admin analytics dashboard with Chart.js charts and Leaflet incident map
 
 ---
 
