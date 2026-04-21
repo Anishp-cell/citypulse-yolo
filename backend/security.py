@@ -3,9 +3,18 @@ from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 import os
+import warnings
 
 # Secret key to encode the JWT
-SECRET_KEY = os.getenv("SECRET_KEY", "your-super-secret-key-change-in-prod")
+_DEFAULT_KEY = "your-super-secret-key-change-in-prod"
+SECRET_KEY = os.getenv("SECRET_KEY", _DEFAULT_KEY)
+if SECRET_KEY == _DEFAULT_KEY:
+    warnings.warn(
+        "⚠️  SECRET_KEY is set to the insecure default value. "
+        "Set the SECRET_KEY environment variable before deploying to production.",
+        RuntimeWarning,
+        stacklevel=2,
+    )
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 

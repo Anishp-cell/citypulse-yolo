@@ -3,10 +3,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from sqlalchemy.orm import Session
+from typing import Optional
 from backend.database import engine, get_db, Base
-from backend.models import Incident
+from backend.models import Incident, Notification, IncidentStatus, UserRole
 from backend.routes import auth
-from backend.dependencies import get_current_user, require_officer_or_admin, require_citizen, User  # For role-based protection
+from backend.dependencies import get_current_user, require_officer_or_admin, User
 import shutil
 import os
 import cv2
@@ -29,16 +30,51 @@ PROCESSED_DIR = Path("static/processed")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
 
+# --- FILE VALIDATION ---
+MAX_IMAGE_SIZE = 50 * 1024 * 1024    # 50 MB
+MAX_VIDEO_SIZE = 500 * 1024 * 1024   # 500 MB
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/jpg", "image/webp"}
+
+
+async def save_upload_with_size_limit(upload: UploadFile, path: Path, max_bytes: int) -> int:
+    """Stream-write an uploaded file, raising HTTP 413 if it exceeds max_bytes."""
+    size = 0
+    try:
+        with open(path, "wb") as f:
+            while True:
+                chunk = await upload.read(65536)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > max_bytes:
+                    path.unlink(missing_ok=True)
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File too large. Maximum allowed size is {max_bytes // (1024 * 1024)} MB."
+                    )
+                f.write(chunk)
+    except HTTPException:
+        raise
+    except Exception as e:
+        path.unlink(missing_ok=True)
+        raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {e}")
+    return size
+
+
 # --- APP INIT ---
 app = FastAPI(title="CityPulse API", description="Road Incident Detection & Guidance API")
 
-# CORS
+# CORS — restrict to explicit origins in production via ALLOWED_ORIGINS env var
+# e.g. ALLOWED_ORIGINS="https://citypulse.ai,https://app.citypulse.ai"
+_origins_raw = os.getenv("ALLOWED_ORIGINS", "")
+ALLOWED_ORIGINS = [o.strip() for o in _origins_raw.split(",") if o.strip()] or ["http://localhost:8000"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # Serve static files (processed images)
@@ -81,13 +117,17 @@ async def analyze_image(
 ):
     """Upload an image for analysis. Returns detections, guidance, and annotated image URL."""
     try:
-        file_ext = file.filename.split('.')[-1]
+        if file.content_type not in ALLOWED_IMAGE_TYPES:
+            raise HTTPException(
+                status_code=415,
+                detail="Unsupported image type. Allowed: JPEG, PNG, WebP."
+            )
+        file_ext = (file.filename or "upload").rsplit(".", 1)[-1].lower()
         unique_id = str(uuid.uuid4())
         filename = f"{unique_id}.{file_ext}"
         file_path = UPLOAD_DIR / filename
 
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        await save_upload_with_size_limit(file, file_path, MAX_IMAGE_SIZE)
 
         result = service.detect_image(str(file_path))
 
@@ -147,8 +187,7 @@ async def analyze_video(
         filename = f"{unique_id}.{file_ext}"
         file_path = VIDEO_DIR / filename
 
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        await save_upload_with_size_limit(file, file_path, MAX_VIDEO_SIZE)
 
         result = service.detect_video(str(file_path))
 
@@ -196,19 +235,138 @@ async def analyze_video(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/notify")
-async def send_notification(
+async def send_notification_endpoint(
     data: dict,
-    current_user: User = Depends(require_officer_or_admin) # Only officers/admins can manually push notifications
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """Trigger a simulated notification. Expects: {"type": "accident"|"pothole", "location": "string"}"""
+    """Send a real notification to authorities.
+    Expects: {"type": "accident"|"pothole", "location": "string", "incident_id": int|null}"""
     detection_type = data.get("type")
     location = data.get("location")
+    incident_id = data.get("incident_id")
 
     if not detection_type or not location:
         raise HTTPException(status_code=400, detail="Missing type or location")
+    if detection_type not in ("accident", "pothole"):
+        raise HTTPException(status_code=400, detail="type must be 'accident' or 'pothole'")
 
-    success, message = service.send_notification(detection_type, location)
+    success, message = service.send_notification(detection_type, location, incident_id=incident_id)
+
+    # Persist notification records when incident_id is provided
+    if incident_id:
+        incident = db.query(Incident).filter(Incident.id == incident_id).first()
+        if incident:
+            if os.environ.get("SENDGRID_API_KEY"):
+                db.add(Notification(
+                    incident_id=incident_id,
+                    channel="email",
+                    recipient=os.environ.get("ALERT_EMAIL", "authority@example.com"),
+                    status="sent" if success else "failed",
+                ))
+            if os.environ.get("TWILIO_ACCOUNT_SID"):
+                db.add(Notification(
+                    incident_id=incident_id,
+                    channel="sms",
+                    recipient=os.environ.get("ALERT_PHONE", "emergency"),
+                    status="sent" if success else "failed",
+                ))
+            if success:
+                incident.status = IncidentStatus.notified
+            db.commit()
+
     return {"success": success, "message": message}
+
+
+@app.get("/api/incidents")
+def list_incidents(
+    skip: int = 0,
+    limit: int = 20,
+    severity: Optional[str] = None,
+    status: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List incidents. Citizens see only their own; officers/admins see all."""
+    query = db.query(Incident)
+    if current_user.role == UserRole.citizen:
+        query = query.filter(Incident.reported_by == current_user.id)
+    if severity:
+        query = query.filter(Incident.severity == severity)
+    if status:
+        query = query.filter(Incident.status == status)
+
+    total = query.count()
+    incidents = query.order_by(Incident.created_at.desc()).offset(skip).limit(min(limit, 100)).all()
+
+    return {
+        "total": total,
+        "incidents": [
+            {
+                "id": inc.id,
+                "severity": inc.severity,
+                "status": inc.status.value if inc.status else None,
+                "address_text": inc.address_text,
+                "image_url": inc.image_url,
+                "created_at": inc.created_at.isoformat() if inc.created_at else None,
+                "reported_by": inc.reported_by,
+            }
+            for inc in incidents
+        ],
+    }
+
+
+@app.get("/api/incidents/{incident_id}")
+def get_incident(
+    incident_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get a single incident by ID."""
+    incident = db.query(Incident).filter(Incident.id == incident_id).first()
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    if current_user.role == UserRole.citizen and incident.reported_by != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to view this incident")
+    return {
+        "id": incident.id,
+        "severity": incident.severity,
+        "status": incident.status.value if incident.status else None,
+        "address_text": incident.address_text,
+        "image_url": incident.image_url,
+        "video_url": incident.video_url,
+        "detection_results": incident.detection_results,
+        "guidance": incident.guidance,
+        "lat": incident.lat,
+        "lng": incident.lng,
+        "created_at": incident.created_at.isoformat() if incident.created_at else None,
+        "reported_by": incident.reported_by,
+    }
+
+
+@app.patch("/api/incidents/{incident_id}/status")
+def update_incident_status(
+    incident_id: int,
+    data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_officer_or_admin),
+):
+    """Update incident status. Officers/admins only."""
+    new_status = data.get("status")
+    if not new_status:
+        raise HTTPException(status_code=400, detail="Missing 'status' field")
+    try:
+        status_val = IncidentStatus(new_status)
+    except ValueError:
+        valid = [s.value for s in IncidentStatus]
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid}")
+    incident = db.query(Incident).filter(Incident.id == incident_id).first()
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    incident.status = status_val
+    db.commit()
+    return {"success": True, "incident_id": incident_id, "status": new_status}
+
 
 if __name__ == "__main__":
     import uvicorn

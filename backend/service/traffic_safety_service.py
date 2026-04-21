@@ -6,9 +6,19 @@ from pathlib import Path
 import tempfile
 import os
 from datetime import datetime
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+try:
+    import sendgrid as _sendgrid
+    from sendgrid.helpers.mail import Mail as _SGMail
+    _HAS_SENDGRID = True
+except ImportError:
+    _HAS_SENDGRID = False
+
+try:
+    from twilio.rest import Client as _TwilioClient
+    _HAS_TWILIO = True
+except ImportError:
+    _HAS_TWILIO = False
+
 import shutil
 import google.generativeai as genai
 
@@ -417,21 +427,91 @@ class TrafficSafetyService:
         except Exception as e:
             return {"error": str(e)}
 
-    def send_notification(self, detection_type, location, image_path=None):
-        """Simulate email notification"""
+    def send_notification(self, detection_type, location, incident_id=None):
+        """Send real email (SendGrid) and SMS (Twilio) notifications to authorities."""
         if detection_type not in AUTHORITY_CONTACTS:
             return False, "Invalid detection type"
-            
+
         contact = AUTHORITY_CONTACTS[detection_type]
-        
-        # Simulation Logic
-        print(f"--- SIMULATED EMAIL ---")
-        print(f"To: {contact['email']}")
-        print(f"Subject: {detection_type.upper()} REPORT at {location}")
-        print("Body: Incident detected. Please respond.")
-        print("-----------------------")
-        
-        return True, f"Notification sent to {contact['department']}"
+        channels_used = []
+        errors = []
+
+        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+        subject = f"[CityPulse Alert] {detection_type.replace('_', ' ').title()} at {location}"
+        body_html = (
+            f"<h2>CityPulse Incident Alert</h2>"
+            f"<p><strong>Type:</strong> {detection_type.replace('_', ' ').title()}</p>"
+            f"<p><strong>Location:</strong> {location}</p>"
+            f"<p><strong>Incident ID:</strong> {incident_id or 'N/A'}</p>"
+            f"<p><strong>Time:</strong> {timestamp}</p>"
+            f"<p>Please respond immediately. View full details in your CityPulse dashboard.</p>"
+        )
+
+        # --- SendGrid Email ---
+        sendgrid_key = os.environ.get("SENDGRID_API_KEY")
+        alert_email = os.environ.get("ALERT_EMAIL", contact["email"])
+        from_email = os.environ.get("SENDGRID_FROM_EMAIL", "noreply@citypulse.ai")
+
+        if sendgrid_key and _HAS_SENDGRID:
+            try:
+                sg = _sendgrid.SendGridAPIClient(sendgrid_key)
+                message = _SGMail(
+                    from_email=from_email,
+                    to_emails=alert_email,
+                    subject=subject,
+                    html_content=body_html,
+                )
+                response = sg.send(message)
+                if response.status_code in (200, 202):
+                    channels_used.append(f"email ({alert_email})")
+                    print(f"SendGrid email sent to {alert_email} — HTTP {response.status_code}")
+                else:
+                    errors.append(f"SendGrid returned HTTP {response.status_code}")
+            except Exception as e:
+                errors.append(f"Email error: {e}")
+                print(f"SendGrid error: {e}")
+        elif sendgrid_key and not _HAS_SENDGRID:
+            errors.append("sendgrid package not installed")
+        else:
+            print("SENDGRID_API_KEY not set — skipping email notification")
+
+        # --- Twilio SMS ---
+        twilio_sid = os.environ.get("TWILIO_ACCOUNT_SID")
+        twilio_token = os.environ.get("TWILIO_AUTH_TOKEN")
+        twilio_from = os.environ.get("TWILIO_FROM_PHONE")
+        alert_phone = os.environ.get("ALERT_PHONE")
+
+        if twilio_sid and twilio_token and twilio_from and alert_phone and _HAS_TWILIO:
+            try:
+                client = _TwilioClient(twilio_sid, twilio_token)
+                sms_body = (
+                    f"[CityPulse] {detection_type.replace('_', ' ').title()} at {location}. "
+                    f"Incident #{incident_id or 'N/A'}. Please respond immediately."
+                )
+                msg = client.messages.create(
+                    body=sms_body,
+                    from_=twilio_from,
+                    to=alert_phone,
+                )
+                channels_used.append(f"SMS ({alert_phone})")
+                print(f"Twilio SMS sent to {alert_phone} — SID {msg.sid}")
+            except Exception as e:
+                errors.append(f"SMS error: {e}")
+                print(f"Twilio error: {e}")
+        elif twilio_sid and not _HAS_TWILIO:
+            errors.append("twilio package not installed")
+        else:
+            print("Twilio env vars not fully set — skipping SMS notification")
+
+        if not channels_used and not errors:
+            return (
+                False,
+                "No notification services configured. "
+                "Set SENDGRID_API_KEY or TWILIO_ACCOUNT_SID/AUTH_TOKEN/FROM_PHONE/ALERT_PHONE in environment.",
+            )
+        if channels_used:
+            return True, f"Notification sent to {contact['department']} via: {', '.join(channels_used)}"
+        return False, f"Notification failed: {'; '.join(errors)}"
 
 
 
