@@ -436,8 +436,11 @@ function logout() {
     localStorage.removeItem('cp_token');
     document.getElementById('logoutBtn').style.display = 'none';
     document.getElementById('historyNavPill').style.display = 'none';
+    document.getElementById('dashboardNavPill').style.display = 'none';
     document.getElementById('userInfo').textContent = '';
     document.getElementById('history').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'none';
+    if (_map) { _map.remove(); _map = null; }
     resetUpload();
     showAuthModal();
 }
@@ -445,6 +448,7 @@ function logout() {
 function onAuthSuccess() {
     document.getElementById('logoutBtn').style.display = 'inline-flex';
     document.getElementById('historyNavPill').style.display = 'inline-flex';
+    document.getElementById('dashboardNavPill').style.display = 'inline-flex';
     fetch('/auth/me', { headers: getAuthHeaders() })
         .then(r => r.json())
         .then(data => { document.getElementById('userInfo').textContent = data.email || ''; })
@@ -526,3 +530,167 @@ async function loadHistory() {
         onAuthSuccess();
     }
 })();
+
+// ───────── Dashboard ─────────
+
+let _chartSeverity = null;
+let _chartStatus = null;
+let _chartDaily = null;
+let _map = null;
+
+const CHART_COLORS = {
+    no_accident:       'rgba(34,197,94,0.8)',
+    minor_accident:    'rgba(245,158,11,0.8)',
+    moderate_accident: 'rgba(249,115,22,0.8)',
+    severe_accident:   'rgba(239,68,68,0.8)',
+    totaled_vehicle:   'rgba(185,28,28,0.8)',
+    pothole:           'rgba(6,182,212,0.8)',
+};
+
+const STATUS_COLORS = {
+    detected:     'rgba(59,130,246,0.8)',
+    notified:     'rgba(245,158,11,0.8)',
+    acknowledged: 'rgba(168,85,247,0.8)',
+    resolved:     'rgba(34,197,94,0.8)',
+    closed:       'rgba(100,116,139,0.8)',
+};
+
+const CHART_DEFAULTS = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { labels: { color: '#94a3b8', font: { family: 'Inter' } } } },
+};
+
+function destroyChart(ref) { if (ref) { ref.destroy(); } return null; }
+
+async function loadDashboard() {
+    const section = document.getElementById('dashboard');
+    section.style.display = 'block';
+    section.scrollIntoView({ behavior: 'smooth' });
+
+    try {
+        const [statsRes, incRes] = await Promise.all([
+            fetch('/api/stats', { headers: getAuthHeaders() }),
+            fetch('/api/incidents?limit=100', { headers: getAuthHeaders() }),
+        ]);
+
+        if (statsRes.status === 401 || incRes.status === 401) { showAuthModal(); return; }
+
+        const stats = await statsRes.json();
+        const incData = await incRes.json();
+
+        // ── Stat tiles ──
+        const open = (stats.by_status.detected || 0) + (stats.by_status.notified || 0) + (stats.by_status.acknowledged || 0);
+        document.getElementById('statTotal').textContent = stats.total ?? 0;
+        document.getElementById('statOpen').textContent = open;
+        document.getElementById('statResolved').textContent = stats.by_status.resolved ?? 0;
+        document.getElementById('statCritical').textContent =
+            (stats.by_severity.severe_accident || 0) + (stats.by_severity.totaled_vehicle || 0);
+
+        // ── Severity doughnut ──
+        _chartSeverity = destroyChart(_chartSeverity);
+        const sevLabels = Object.keys(stats.by_severity).map(k => k.replace(/_/g, ' '));
+        const sevData   = Object.values(stats.by_severity);
+        const sevColors = Object.keys(stats.by_severity).map(k => CHART_COLORS[k] || 'rgba(148,163,184,0.8)');
+        _chartSeverity = new Chart(document.getElementById('chartSeverity'), {
+            type: 'doughnut',
+            data: { labels: sevLabels, datasets: [{ data: sevData, backgroundColor: sevColors, borderWidth: 0 }] },
+            options: { ...CHART_DEFAULTS, cutout: '65%' },
+        });
+
+        // ── Status doughnut ──
+        _chartStatus = destroyChart(_chartStatus);
+        const stLabels = Object.keys(stats.by_status);
+        const stData   = Object.values(stats.by_status);
+        const stColors = stLabels.map(k => STATUS_COLORS[k] || 'rgba(148,163,184,0.8)');
+        _chartStatus = new Chart(document.getElementById('chartStatus'), {
+            type: 'doughnut',
+            data: { labels: stLabels, datasets: [{ data: stData, backgroundColor: stColors, borderWidth: 0 }] },
+            options: { ...CHART_DEFAULTS, cutout: '65%' },
+        });
+
+        // ── Daily bar chart ──
+        _chartDaily = destroyChart(_chartDaily);
+        // Fill in missing days with 0
+        const dailyMap = {};
+        (stats.daily_last_7_days || []).forEach(d => { dailyMap[d.date] = d.count; });
+        const dayLabels = [];
+        const dayValues = [];
+        for (let i = 6; i >= 0; i--) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            const key = d.toISOString().split('T')[0];
+            dayLabels.push(key.slice(5)); // MM-DD
+            dayValues.push(dailyMap[key] || 0);
+        }
+        _chartDaily = new Chart(document.getElementById('chartDaily'), {
+            type: 'bar',
+            data: {
+                labels: dayLabels,
+                datasets: [{
+                    label: 'Incidents',
+                    data: dayValues,
+                    backgroundColor: 'rgba(59,130,246,0.7)',
+                    borderRadius: 4,
+                }],
+            },
+            options: {
+                ...CHART_DEFAULTS,
+                scales: {
+                    x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y: { ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true },
+                },
+                plugins: { legend: { display: false } },
+            },
+        });
+
+        // ── Leaflet map ──
+        const incidents = (incData.incidents || []).filter(i => i.lat && i.lng);
+        const mapEl = document.getElementById('incidentMap');
+        const hintEl = document.getElementById('mapHint');
+
+        if (incidents.length === 0) {
+            mapEl.style.display = 'none';
+            hintEl.style.display = 'block';
+        } else {
+            mapEl.style.display = 'block';
+            hintEl.style.display = 'none';
+
+            if (_map) { _map.remove(); _map = null; }
+            _map = L.map('incidentMap', { zoomControl: true });
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 18,
+            }).addTo(_map);
+
+            const bounds = [];
+            incidents.forEach(inc => {
+                const meta = SEVERITY_MAP[inc.severity] || { dot: '#64748b', label: inc.severity };
+                const color = meta.dot;
+                const marker = L.circleMarker([inc.lat, inc.lng], {
+                    radius: 9,
+                    fillColor: color,
+                    color: '#0a0e1a',
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.85,
+                }).addTo(_map);
+                marker.bindPopup(`
+                    <strong>${(meta.label || inc.severity).replace(/_/g, ' ')}</strong><br>
+                    ${inc.address_text || ''}<br>
+                    <small>${inc.created_at ? new Date(inc.created_at).toLocaleString() : ''}</small>
+                `);
+                bounds.push([inc.lat, inc.lng]);
+            });
+
+            if (bounds.length === 1) {
+                _map.setView(bounds[0], 13);
+            } else {
+                _map.fitBounds(bounds, { padding: [40, 40] });
+            }
+        }
+
+    } catch (err) {
+        console.error('Dashboard error:', err);
+    }
+}

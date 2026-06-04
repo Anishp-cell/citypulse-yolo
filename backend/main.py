@@ -3,7 +3,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import func, cast, Date
 from typing import Optional
+from datetime import datetime, timedelta
 from backend.database import engine, get_db, Base
 from backend.models import Incident, Notification, IncidentStatus, UserRole
 from backend.routes import auth
@@ -366,6 +368,56 @@ def update_incident_status(
     incident.status = status_val
     db.commit()
     return {"success": True, "incident_id": incident_id, "status": new_status}
+
+
+@app.get("/api/stats")
+def get_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Aggregate stats for the dashboard. Officers/admins see all; citizens see own."""
+    base_q = db.query(Incident)
+    if current_user.role == UserRole.citizen:
+        base_q = base_q.filter(Incident.reported_by == current_user.id)
+
+    total = base_q.count()
+
+    # Breakdown by severity
+    severity_rows = (
+        base_q.with_entities(Incident.severity, func.count(Incident.id))
+        .group_by(Incident.severity)
+        .all()
+    )
+    by_severity = {row[0]: row[1] for row in severity_rows}
+
+    # Breakdown by status
+    status_rows = (
+        base_q.with_entities(Incident.status, func.count(Incident.id))
+        .group_by(Incident.status)
+        .all()
+    )
+    by_status = {(row[0].value if row[0] else "unknown"): row[1] for row in status_rows}
+
+    # Last 7 days daily counts
+    seven_days_ago = datetime.utcnow() - timedelta(days=6)
+    daily_rows = (
+        base_q.filter(Incident.created_at >= seven_days_ago)
+        .with_entities(
+            cast(Incident.created_at, Date).label("day"),
+            func.count(Incident.id).label("count"),
+        )
+        .group_by("day")
+        .order_by("day")
+        .all()
+    )
+    daily = [{"date": str(row.day), "count": row.count} for row in daily_rows]
+
+    return {
+        "total": total,
+        "by_severity": by_severity,
+        "by_status": by_status,
+        "daily_last_7_days": daily,
+    }
 
 
 if __name__ == "__main__":

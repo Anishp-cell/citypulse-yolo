@@ -12,6 +12,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="/frontend/style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 </head>
 
 <body>
@@ -57,6 +58,7 @@
                 <nav class="nav-pills">
                     <a href="#upload" class="nav-pill active">Analyze</a>
                     <a href="#history" class="nav-pill" id="historyNavPill" onclick="loadHistory()" style="display:none;">History</a>
+                    <a href="#dashboard" class="nav-pill" id="dashboardNavPill" onclick="loadDashboard()" style="display:none;">Dashboard</a>
                     <a href="#how-it-works" class="nav-pill">How It Works</a>
                     <button class="nav-pill nav-pill-logout" id="logoutBtn" onclick="logout()" style="display:none;">Sign Out</button>
                 </nav>
@@ -200,6 +202,56 @@
             </div>
             <div id="historyList" class="history-list"></div>
             <p id="historyEmpty" class="no-detections" style="display:none;">No incidents reported yet.</p>
+        </div>
+    </section>
+
+    <!-- DASHBOARD -->
+    <section id="dashboard" class="section" style="display:none;">
+        <div class="container">
+            <h2 class="section-title">Dashboard</h2>
+
+            <!-- Stats header -->
+            <div class="stats-bar" id="statsBar">
+                <div class="stat-tile glass-card">
+                    <span class="stat-tile-val" id="statTotal">—</span>
+                    <span class="stat-tile-label">Total Incidents</span>
+                </div>
+                <div class="stat-tile glass-card">
+                    <span class="stat-tile-val" id="statOpen">—</span>
+                    <span class="stat-tile-label">Open</span>
+                </div>
+                <div class="stat-tile glass-card">
+                    <span class="stat-tile-val" id="statResolved">—</span>
+                    <span class="stat-tile-label">Resolved</span>
+                </div>
+                <div class="stat-tile glass-card">
+                    <span class="stat-tile-val" id="statCritical">—</span>
+                    <span class="stat-tile-label">Critical / Severe</span>
+                </div>
+            </div>
+
+            <!-- Charts row -->
+            <div class="charts-row">
+                <div class="glass-card chart-card">
+                    <h3>Incidents by Severity</h3>
+                    <div class="chart-wrap"><canvas id="chartSeverity"></canvas></div>
+                </div>
+                <div class="glass-card chart-card">
+                    <h3>Status Pipeline</h3>
+                    <div class="chart-wrap"><canvas id="chartStatus"></canvas></div>
+                </div>
+                <div class="glass-card chart-card chart-card-wide">
+                    <h3>Last 7 Days</h3>
+                    <div class="chart-wrap"><canvas id="chartDaily"></canvas></div>
+                </div>
+            </div>
+
+            <!-- Map -->
+            <div class="glass-card map-card">
+                <h3>Incident Map</h3>
+                <div id="incidentMap"></div>
+                <p class="map-hint" id="mapHint" style="display:none;">No geo-tagged incidents to display yet.</p>
+            </div>
         </div>
     </section>
 
@@ -356,6 +408,8 @@
         <p>CityPulse — Built with ❤️ for safer cities</p>
     </footer>
 
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV/XN/WLcE=" crossorigin=""></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="/frontend/app.js"></script>
 </body>
 
