@@ -65,9 +65,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return JSONResponse({"detail": "csrf_header_missing"}, status_code=403)
         return await call_next(request)
 
-    from backend.routes import auth, media
+    from backend.routes import auth, media, reports
 
     app.include_router(auth.router)
+    app.include_router(reports.router)
     app.include_router(media.router)
 
     @app.get("/health")

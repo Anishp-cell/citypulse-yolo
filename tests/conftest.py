@@ -9,6 +9,10 @@ from backend.settings import Settings
 
 _counter = itertools.count(1)
 
+import backend.security  # noqa: E402
+
+backend.security.BCRYPT_ROUNDS = 4  # fast hashing in tests only
+
 
 @pytest.fixture
 def settings(tmp_path):

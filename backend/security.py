@@ -9,10 +9,11 @@ ALGORITHM = "HS256"
 SESSION_COOKIE = "cp_session"
 SESSION_DAYS = 30
 RESET_MINUTES = 30
+BCRYPT_ROUNDS = 12  # tests lower this for speed
 
 
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt(BCRYPT_ROUNDS)).decode()
 
 
 def verify_password(password: str, hashed: str) -> bool:
