@@ -1,0 +1,99 @@
+{
+  "app_name": "CityPulse",
+  "tagline": "AI-Powered Road Safety",
+  "nav": {
+    "home": "Home",
+    "report": "Report",
+    "my_reports": "My Reports",
+    "safety": "Safety Info",
+    "login": "Sign In",
+    "register": "Register",
+    "logout": "Sign Out"
+  },
+  "home": {
+    "hero_title": "Report Road Incidents",
+    "hero_subtitle": "Help make your city safer. Report accidents and potholes instantly — our AI analyzes the severity and alerts authorities.",
+    "quick_report": "Quick Report",
+    "upload_photo": "Upload Photo",
+    "take_photo": "Take Photo",
+    "emergency_numbers": "Emergency Numbers"
+  },
+  "report": {
+    "title": "Report an Incident",
+    "upload_image": "Upload an image or video",
+    "drag_drop": "Drag & drop or click to browse",
+    "supported": "JPG, PNG, MP4, AVI, MOV supported",
+    "location": "Location",
+    "auto_detect": "Auto-detect GPS",
+    "manual_entry": "Or type address manually",
+    "description": "Description (optional)",
+    "analyze": "Analyze",
+    "analyzing": "Analyzing...",
+    "send_alert": "🚨 Alert Authorities",
+    "sending": "Sending...",
+    "alert_sent": "Alert sent to authorities!",
+    "results": "Analysis Results",
+    "severity": "Severity",
+    "guidance": "Emergency Guidance",
+    "ai_summary": "AI Summary",
+    "immediate_actions": "Immediate Actions",
+    "warning_signs": "Warning Signs",
+    "do_not": "Do Not",
+    "recommendations": "Recommendations"
+  },
+  "my_reports": {
+    "title": "My Reports",
+    "empty": "No reports yet. Submit your first report to help keep your city safe!",
+    "status": "Status",
+    "location_not_set": "Location not set"
+  },
+  "safety": {
+    "title": "Safety Information",
+    "emergency_title": "Emergency Numbers",
+    "ambulance": "Ambulance",
+    "police": "Police",
+    "fire": "Fire",
+    "first_aid_title": "Basic First Aid",
+    "tips_title": "Road Safety Tips"
+  },
+  "auth": {
+    "sign_in": "Sign In",
+    "sign_up": "Create Account",
+    "email": "Email",
+    "password": "Password",
+    "phone": "Phone (optional)",
+    "signing_in": "Signing in...",
+    "creating": "Creating account...",
+    "no_account": "Don't have an account?",
+    "have_account": "Already have an account?"
+  },
+  "admin": {
+    "dashboard": "Dashboard",
+    "incidents": "Incidents",
+    "map": "Live Map",
+    "analytics": "Analytics",
+    "users": "Users",
+    "settings": "Settings",
+    "total_incidents": "Total Incidents",
+    "active_alerts": "Active Alerts",
+    "resolved_today": "Resolved Today",
+    "response_time": "Avg Response",
+    "recent_activity": "Recent Activity",
+    "severity_breakdown": "Severity Breakdown",
+    "incident_trends": "Incident Trends",
+    "hotspots": "Accident Hotspots",
+    "heatmap": "Heatmap"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Something went wrong",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "search": "Search...",
+    "filter": "Filter",
+    "export": "Export",
+    "no_data": "No data available"
+  }
+}

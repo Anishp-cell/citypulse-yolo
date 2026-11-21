@@ -1,5 +1,36 @@
-﻿__pycache__/
+# Python
+__pycache__/
 *.pyc
 .venv/
 venv/
 .ipynb_checkpoints/
+.pytest_cache/
+.ruff_cache/
+
+# Secrets & local state
+.env
+.env.*
+!.env.example
+*.db
+static/
+media/
+
+# ML artifacts (kept on disk, not in git)
+data/
+runs/
+runs_citypulse/
+*.pt
+*.zip
+
+# Node
+node_modules/
+app/dist/
+app/dev-dist/
+app/test-results/
+app/playwright-report/
+
+# Local tooling
+.agents/
+.claude/
+skills-lock.json
+.superpowers/

@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
 import os
 import warnings
 
@@ -10,7 +10,7 @@ _DEFAULT_KEY = "your-super-secret-key-change-in-prod"
 SECRET_KEY = os.getenv("SECRET_KEY", _DEFAULT_KEY)
 if SECRET_KEY == _DEFAULT_KEY:
     warnings.warn(
-        "⚠️  SECRET_KEY is set to the insecure default value. "
+        "SECRET_KEY is set to the insecure default value. "
         "Set the SECRET_KEY environment variable before deploying to production.",
         RuntimeWarning,
         stacklevel=2,
@@ -18,13 +18,11 @@ if SECRET_KEY == _DEFAULT_KEY:
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()

@@ -55,3 +55,28 @@ def login(db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = 
 @router.get("/me", response_model=UserResponse)
 def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+@router.post("/demo-login", response_model=Token)
+def demo_login(db: Session = Depends(get_db)):
+    """One-click demo login: creates or reuses a demo user and returns a token."""
+    DEMO_EMAIL = "demo@citypulse.ai"
+    DEMO_PASSWORD = "CityPulseDemo2026!"
+
+    user = db.query(User).filter(User.email == DEMO_EMAIL).first()
+    if not user:
+        user = User(
+            email=DEMO_EMAIL,
+            hashed_password=get_password_hash(DEMO_PASSWORD),
+            phone=None,
+            role="citizen",
+            district="Demo District",
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    access_token = create_access_token(
+        data={"sub": user.email, "role": user.role.value if hasattr(user.role, 'value') else user.role, "district": user.district},
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+    return {"access_token": access_token, "token_type": "bearer"}

@@ -255,6 +255,11 @@ function renderResults(data, isVideo = false) {
     // Show results
     resultsSection.style.display = 'block';
     resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    // Auto-alert for severe detections (demo walkthrough step 5)
+    if (detections.length > 0 && currentIncidentId) {
+        autoAlert(severity, currentIncidentId);
+    }
 }
 
 // ───────── Render Guidance ─────────
@@ -515,6 +520,102 @@ async function loadHistory() {
         loadingEl.style.display = 'none';
         listEl.innerHTML = `<p class="no-detections" style="color:var(--red)">Failed to load history: ${err.message}</p>`;
     }
+}
+
+// ───────── Demo Login ─────────
+
+async function demoLogin() {
+    const btn = document.getElementById('demoLoginBtn');
+    setBtnLoading(btn, true);
+    try {
+        const res = await fetch('/auth/demo-login', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) { alert(data.detail || 'Demo login failed'); return; }
+        authToken = data.access_token;
+        localStorage.setItem('cp_token', authToken);
+        hideAuthModal();
+        onAuthSuccess();
+    } catch (err) {
+        alert('Demo login failed: ' + err.message);
+    } finally {
+        setBtnLoading(btn, false);
+    }
+}
+
+// ───────── Auto-Alert on Severe Detection ─────────
+
+const AUTO_ALERT_SEVERITIES = ['severe_accident', 'totaled_vehicle', 'pothole'];
+const DEMO_LOCATIONS = {
+    severe_accident: 'NH-48, near Hinjawadi, Pune',
+    totaled_vehicle: 'MG Road & Brigade Rd Junction, Bangalore',
+    pothole: 'LBS Marg, Kurla West, Mumbai',
+    minor_accident: 'Ring Road, Sector 14, Gurgaon',
+    moderate_accident: 'Anna Salai, Chennai',
+};
+const DEMO_COORDS = {
+    severe_accident: { lat: 18.5913, lng: 73.7389 },
+    totaled_vehicle: { lat: 12.9716, lng: 77.6070 },
+    pothole: { lat: 19.0690, lng: 72.8826 },
+    minor_accident: { lat: 28.4689, lng: 77.0266 },
+    moderate_accident: { lat: 13.0569, lng: 80.2425 },
+};
+
+async function autoAlert(severity, incidentId) {
+    if (!AUTO_ALERT_SEVERITIES.includes(severity)) return;
+
+    const isPothole = severity === 'pothole';
+    const type = isPothole ? 'pothole' : 'accident';
+    const location = DEMO_LOCATIONS[severity] || 'Unspecified location';
+    const coords = DEMO_COORDS[severity] || { lat: 20.5937, lng: 78.9629 };
+
+    try {
+        const res = await fetch(`${API_BASE}/api/notify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+            body: JSON.stringify({ type, location, incident_id: incidentId })
+        });
+        const data = await res.json();
+
+        // Show the toast
+        const dept = isPothole ? 'Public Works Department' : 'Emergency Services (108)';
+        const coordStr = `${coords.lat.toFixed(4)}°N, ${coords.lng.toFixed(4)}°E`;
+        showAlertToast(
+            isPothole ? 'pothole' : 'emergency',
+            `Alert sent → ${dept}`,
+            `📍 ${location} · GPS: ${coordStr}`,
+        );
+
+        // Also fill in the manual location input for visual consistency
+        const locInput = document.getElementById('locationInput');
+        if (locInput) locInput.value = location;
+        const status = document.getElementById('notifyStatus');
+        if (status) {
+            status.textContent = data.message || `Alert dispatched to ${dept}`;
+            status.className = 'notify-status';
+        }
+    } catch (err) {
+        console.error('Auto-alert failed:', err);
+    }
+}
+
+function showAlertToast(type, title, detail) {
+    // Remove any existing toast
+    const existing = document.querySelector('.auto-alert-toast');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.className = 'auto-alert-toast' + (type === 'pothole' ? ' toast-pothole' : '');
+    toast.innerHTML = `
+        <span class="toast-icon">${type === 'pothole' ? '🚧' : '🚨'}</span>
+        <span class="toast-text">
+            <span class="toast-title">${title}</span>
+            <span class="toast-detail">${detail}</span>
+        </span>
+    `;
+    document.body.appendChild(toast);
+
+    // Auto-remove after animation completes
+    setTimeout(() => toast.remove(), 6000);
 }
 
 // ───────── Page Init ─────────

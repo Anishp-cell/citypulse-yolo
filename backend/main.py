@@ -6,8 +6,10 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from backend.database import engine, get_db, Base
 from backend.models import Incident, Notification, IncidentStatus, UserRole
-from backend.routes import auth
+from backend.routes import auth, roads
+from backend.routes import admin as admin_routes
 from backend.dependencies import get_current_user, require_officer_or_admin, User
+from backend.service.spatial_service import find_or_merge_cluster, award_user_points
 import shutil
 import os
 import cv2
@@ -65,9 +67,8 @@ async def save_upload_with_size_limit(upload: UploadFile, path: Path, max_bytes:
 app = FastAPI(title="CityPulse API", description="Road Incident Detection & Guidance API")
 
 # CORS — restrict to explicit origins in production via ALLOWED_ORIGINS env var
-# e.g. ALLOWED_ORIGINS="https://citypulse.ai,https://app.citypulse.ai"
 _origins_raw = os.getenv("ALLOWED_ORIGINS", "")
-ALLOWED_ORIGINS = [o.strip() for o in _origins_raw.split(",") if o.strip()] or ["http://localhost:8000"]
+ALLOWED_ORIGINS = [o.strip() for o in _origins_raw.split(",") if o.strip()] or ["http://localhost:8000", "http://localhost:8081", "http://10.0.2.2:8000"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -94,8 +95,9 @@ print("Initializing Database...")
 Base.metadata.create_all(bind=engine)
 
 # --- ROUTES ---
-# Include auth router
 app.include_router(auth.router)
+app.include_router(roads.router)
+app.include_router(admin_routes.router)
 
 @app.get("/health")
 def health():
@@ -111,11 +113,13 @@ def home():
 @app.post("/api/analyze")
 async def analyze_image(
     file: UploadFile = File(...), 
-    location: str = Form(None), 
+    location: str = Form(None),
+    lat: float = Form(None),
+    lng: float = Form(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user) # Requires ANY logged in user (citizen, officer, or admin)
+    current_user: User = Depends(get_current_user)
 ):
-    """Upload an image for analysis. Returns detections, guidance, and annotated image URL."""
+    """Upload an image for analysis. Returns detections, guidance, cluster ID, and points."""
     try:
         if file.content_type not in ALLOWED_IMAGE_TYPES:
             raise HTTPException(
@@ -140,26 +144,47 @@ async def analyze_image(
 
         image_url = f"/static/processed/{processed_filename}"
 
+        # Geospatial clustering & deduplication
+        cluster_id = None
+        if lat is not None and lng is not None:
+            cluster = find_or_merge_cluster(
+                db=db,
+                lat=lat,
+                lng=lng,
+                severity=result["highest_severity"],
+                address_text=location,
+            )
+            cluster_id = cluster.id
+
         # Save to DB
         db_incident = Incident(
+            cluster_id=cluster_id,
             image_url=image_url,
             severity=result["highest_severity"],
             detection_results=result["detections"],
             guidance=result["guidance"],
             address_text=location,
+            lat=lat,
+            lng=lng,
             reported_by=current_user.id
         )
         db.add(db_incident)
+        
+        # Award Karma Points (+10 for report submission)
+        award_user_points(db, current_user.id, 10, "REPORT_SUBMISSION", db_incident.id)
+
         db.commit()
         db.refresh(db_incident)
 
         return {
             "success": True,
             "incident_id": db_incident.id,
+            "cluster_id": cluster_id,
             "image_url": image_url,
             "detections": result["detections"],
             "highest_severity": result["highest_severity"],
-            "guidance": result["guidance"]
+            "guidance": result["guidance"],
+            "points_earned": 10,
         }
 
     except Exception as e:
@@ -173,9 +198,11 @@ VIDEO_DIR.mkdir(parents=True, exist_ok=True)
 @app.post("/api/analyze-video")
 async def analyze_video(
     file: UploadFile = File(...), 
-    location: str = Form(None), 
+    location: str = Form(None),
+    lat: float = Form(None),
+    lng: float = Form(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user) # Requires ANY logged in user
+    current_user: User = Depends(get_current_user)
 ):
     """Upload a video for analysis. Returns aggregated detections, timeline, keyframe, and guidance."""
     try:
@@ -194,7 +221,7 @@ async def analyze_video(
         if "error" in result:
             return JSONResponse(status_code=500, content={"error": result["error"]})
 
-        # Save the worst-severity keyframe as an image
+        # Save keyframe
         keyframe_filename = f"keyframe_{unique_id}.jpg"
         keyframe_path = PROCESSED_DIR / keyframe_filename
         if result["processed_image"] is not None:
@@ -202,29 +229,47 @@ async def analyze_video(
 
         image_url = f"/static/processed/{keyframe_filename}"
 
+        cluster_id = None
+        if lat is not None and lng is not None:
+            cluster = find_or_merge_cluster(
+                db=db,
+                lat=lat,
+                lng=lng,
+                severity=result["highest_severity"],
+                address_text=location,
+            )
+            cluster_id = cluster.id
+
         # Save to DB
         db_incident = Incident(
+            cluster_id=cluster_id,
             video_url=f"/static/videos/{filename}",
             image_url=image_url,
             severity=result["highest_severity"],
             detection_results=result["detections"],
             guidance=result["guidance"],
             address_text=location,
+            lat=lat,
+            lng=lng,
             reported_by=current_user.id
         )
         db.add(db_incident)
+        award_user_points(db, current_user.id, 15, "VIDEO_REPORT_SUBMISSION", db_incident.id)
+
         db.commit()
         db.refresh(db_incident)
 
         return {
             "success": True,
             "incident_id": db_incident.id,
+            "cluster_id": cluster_id,
             "image_url": image_url,
             "detections": result["detections"],
             "highest_severity": result["highest_severity"],
             "guidance": result["guidance"],
             "timeline": result.get("timeline", []),
-            "video_info": result.get("video_info", {})
+            "video_info": result.get("video_info", {}),
+            "points_earned": 15,
         }
 
     except HTTPException:
@@ -272,7 +317,7 @@ async def send_notification_endpoint(
                     status="sent" if success else "failed",
                 ))
             if success:
-                incident.status = IncidentStatus.notified
+                incident.status = IncidentStatus.routed
             db.commit()
 
     return {"success": success, "message": message}
@@ -308,6 +353,8 @@ def list_incidents(
                 "status": inc.status.value if inc.status else None,
                 "address_text": inc.address_text,
                 "image_url": inc.image_url,
+                "lat": inc.lat,
+                "lng": inc.lng,
                 "created_at": inc.created_at.isoformat() if inc.created_at else None,
                 "reported_by": inc.reported_by,
             }

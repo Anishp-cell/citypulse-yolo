@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict
 from typing import Optional, List, Any, Dict
 from datetime import datetime
 from backend.models import UserRole, IncidentStatus
@@ -7,8 +7,10 @@ from backend.models import UserRole, IncidentStatus
 class UserBase(BaseModel):
     email: str
     phone: Optional[str] = None
+    full_name: Optional[str] = None
     role: UserRole = UserRole.citizen
     district: Optional[str] = None
+    home_ward: Optional[str] = None
 
 class UserCreate(UserBase):
     password: str
@@ -23,18 +25,21 @@ class TokenData(BaseModel):
 
 class UserResponse(UserBase):
     id: int
+    trust_score: float = 0.50
+    points_balance: int = 0
     created_at: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 # ---- Incident Schemas ----
 class IncidentBase(BaseModel):
+    cluster_id: Optional[int] = None
     image_url: Optional[str] = None
     video_url: Optional[str] = None
     severity: str
     lat: Optional[float] = None
     lng: Optional[float] = None
+    speed_kmh: Optional[float] = 0.0
     address_text: Optional[str] = None
     detection_results: Optional[List[Dict[str, Any]]] = None
     guidance: Optional[Dict[str, Any]] = None
@@ -48,8 +53,7 @@ class IncidentResponse(IncidentBase):
     created_at: datetime
     reported_by: Optional[int] = None
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 # ---- Notification Schemas ----
 class NotificationBase(BaseModel):
@@ -65,5 +69,4 @@ class NotificationResponse(NotificationBase):
     id: int
     sent_at: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
