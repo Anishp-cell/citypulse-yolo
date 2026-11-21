@@ -94,3 +94,7 @@ def test_prod_requires_smtp_for_password_reset():
 def test_prod_requires_https_app_url():
     with pytest.raises(SettingsError, match="APP_URL"):
         prod(app_url="http://localhost:8000").validate_for_env()
+
+
+def test_prod_accepts_s3_endpoint_instead_of_r2_account():
+    prod(r2_account_id="", s3_endpoint_url="https://storage.googleapis.com").validate_for_env()

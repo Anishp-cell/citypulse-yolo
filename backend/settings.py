@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     r2_public_bucket: str = ""
     r2_private_bucket: str = ""
     r2_public_base_url: str = ""
+    s3_endpoint_url: str = ""  # set to use another S3-compatible store (e.g. https://storage.googleapis.com)
 
     # ML
     detector: Literal["onnx", "fake"] = "onnx"
@@ -88,8 +89,10 @@ class Settings(BaseSettings):
             raise SettingsError("SMTP_HOST and SMTP_FROM are required in production (password reset emails)")
         if not self.app_url.startswith("https://"):
             raise SettingsError("APP_URL must be the public https:// address in production")
-        required = ["r2_account_id", "r2_access_key_id", "r2_secret_access_key", "r2_public_bucket",
+        required = ["r2_access_key_id", "r2_secret_access_key", "r2_public_bucket",
                     "r2_private_bucket", "r2_public_base_url"]
         missing = [name.upper() for name in required if not getattr(self, name)]
+        if not self.r2_account_id and not self.s3_endpoint_url:
+            missing.append("R2_ACCOUNT_ID or S3_ENDPOINT_URL")
         if missing:
             raise SettingsError(f"R2 storage is not fully configured; missing: {', '.join(missing)}")

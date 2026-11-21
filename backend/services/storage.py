@@ -82,17 +82,22 @@ class LocalStorage:
 
 
 class R2Storage:
-    """Cloudflare R2 via its S3-compatible API."""
+    """Any S3-compatible object store: Cloudflare R2 (by account id) or e.g. Google Cloud Storage
+    (by `endpoint_url` = https://storage.googleapis.com with HMAC keys)."""
 
     def __init__(self, account_id: str, access_key_id: str, secret_access_key: str, public_bucket: str,
-                 private_bucket: str, public_base_url: str):
+                 private_bucket: str, public_base_url: str, endpoint_url: str = ""):
         import boto3
         from botocore.config import Config
 
         self.client = boto3.client(
-            "s3", endpoint_url=f"https://{account_id}.r2.cloudflarestorage.com",
-            aws_access_key_id=access_key_id, aws_secret_access_key=secret_access_key,
-            region_name="auto", config=Config(signature_version="s3v4", retries={"max_attempts": 3}))
+            "s3", endpoint_url=endpoint_url or f"https://{account_id}.r2.cloudflarestorage.com",
+            aws_access_key_id=access_key_id, aws_secret_access_key=secret_access_key, region_name="auto",
+            config=Config(signature_version="s3v4", retries={"max_attempts": 3},
+                          s3={"addressing_style": "path"},
+                          # newer boto3 adds CRC checksums by default, which non-AWS stores may reject
+                          request_checksum_calculation="when_required",
+                          response_checksum_validation="when_required"))
         self.public_bucket, self.private_bucket = public_bucket, private_bucket
         self.public_base_url = public_base_url.rstrip("/")
 
@@ -117,12 +122,19 @@ class R2Storage:
                                                   ExpiresIn=SIGNED_URL_TTL_S)
 
     def delete(self, key: str) -> None:
+        from botocore.exceptions import ClientError
+
         for bucket in (self.public_bucket, self.private_bucket):
-            self.client.delete_object(Bucket=bucket, Key=key)
+            try:
+                self.client.delete_object(Bucket=bucket, Key=key)
+            except ClientError as e:  # GCS reports a missing key; R2/S3 do not
+                if e.response.get("Error", {}).get("Code") not in ("NoSuchKey", "404"):
+                    raise
 
 
 def build_storage(settings) -> Storage:
     if settings.storage_backend == "r2":
         return R2Storage(settings.r2_account_id, settings.r2_access_key_id, settings.r2_secret_access_key,
-                         settings.r2_public_bucket, settings.r2_private_bucket, settings.r2_public_base_url)
+                         settings.r2_public_bucket, settings.r2_private_bucket, settings.r2_public_base_url,
+                         endpoint_url=settings.s3_endpoint_url)
     return LocalStorage(settings.media_dir, settings.secret_key)

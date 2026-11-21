@@ -51,3 +51,26 @@ def test_r2_public_url_uses_base_url():
     assert s.url("reports/a.jpg", public=True) == "https://media.example.com/reports/a.jpg"
     private = s.url("full/a.jpg", public=False)
     assert "priv" in private and "X-Amz-Signature" in private
+
+
+def test_s3_compatible_endpoint_override_for_google_cloud_storage():
+    s = R2Storage(account_id="", access_key_id="k", secret_access_key="s", public_bucket="pub",
+                  private_bucket="priv", public_base_url="https://storage.googleapis.com/pub",
+                  endpoint_url="https://storage.googleapis.com")
+    assert s.client.meta.endpoint_url == "https://storage.googleapis.com"
+    assert s.url("reports/a.jpg", public=True) == "https://storage.googleapis.com/pub/reports/a.jpg"
+    assert "X-Amz-Signature" in s.url("full/a.jpg", public=False)
+
+
+def test_delete_tolerates_key_missing_from_one_bucket():
+    # Found against real GCS: unlike R2, it answers NoSuchKey for the bucket that never held the object.
+    from botocore.stub import Stubber
+
+    s = R2Storage(account_id="", access_key_id="k", secret_access_key="s", public_bucket="pub",
+                  private_bucket="priv", public_base_url="https://x", endpoint_url="https://storage.googleapis.com")
+    with Stubber(s.client) as stub:
+        stub.add_response("delete_object", {}, {"Bucket": "pub", "Key": "a.jpg"})
+        stub.add_client_error("delete_object", service_error_code="NoSuchKey", http_status_code=404,
+                              expected_params={"Bucket": "priv", "Key": "a.jpg"})
+        s.delete("a.jpg")
+        stub.assert_no_pending_responses()
