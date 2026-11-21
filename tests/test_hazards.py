@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -122,9 +122,9 @@ def test_follow_flag_reflects_reporter(app, citizen):
 def test_scorecard_wards_and_roads(app, citizen):
     c, _ = citizen
     detect_pothole(app)
-    now = datetime.now(timezone.utc)
-    a = report(c)["hazard_id"]
-    b = report(c, *offset(*PUNE, north_m=100), severity="high")["hazard_id"]
+    now = datetime.now(UTC)
+    report(c)
+    report(c, *offset(*PUNE, north_m=100), severity="high")
     fixed = report(c, *offset(*PUNE, north_m=200))["hazard_id"]
     set_status(app, fixed, HazardStatus.fixed, first_reported_at=now - timedelta(days=50),
                fixed_at=now - timedelta(days=40))

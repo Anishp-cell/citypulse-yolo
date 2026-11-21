@@ -1,6 +1,6 @@
 """Password hashing and signed tokens (session cookie + password reset)."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import bcrypt
 import jwt
@@ -24,7 +24,7 @@ def verify_password(password: str, hashed: str) -> bool:
 
 
 def _encode(payload: dict, secret: str, ttl: timedelta) -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return jwt.encode({**payload, "iat": now, "exp": now + ttl}, secret, algorithm=ALGORITHM)
 
 

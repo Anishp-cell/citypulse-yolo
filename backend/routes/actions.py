@@ -1,6 +1,6 @@
 """Things citizens do to a hazard: follow it, record that they filed it with the city, vote on a fix, flag it."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
@@ -83,7 +83,7 @@ def mark_filed(hazard_id: int, body: FiledIn, background: BackgroundTasks, reque
     elif h.status not in FILED_STATUSES:
         raise HTTPException(status_code=409, detail="cannot_file_in_this_status")
     h.official_portal, h.official_ticket_id = body.portal, body.ticket_id
-    h.updated_at = datetime.now(timezone.utc)
+    h.updated_at = datetime.now(UTC)
     _follow(db, user, h)
     db.commit()
     if event is not None:
@@ -123,7 +123,7 @@ def verify(hazard_id: int, request: Request, background: BackgroundTasks,
     elif not_fixed_votes >= 2:
         events.append(apply_transition(db, h, HazardStatus.open, role="system",
                                        note="Citizens say it is still there; reopened"))
-    h.priority_score = hazard_priority(h, datetime.now(timezone.utc))
+    h.priority_score = hazard_priority(h, datetime.now(UTC))
     _follow(db, user, h)
     db.commit()
     for ev in events:

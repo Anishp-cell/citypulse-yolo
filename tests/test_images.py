@@ -3,8 +3,14 @@ import io
 import pytest
 from PIL import Image
 
-from backend.services.images import (ImageTooLarge, MAX_SIDE, UnsupportedImage, make_public_crop, make_thumb,
-                                     process_upload)
+from backend.services.images import (
+    MAX_SIDE,
+    ImageTooLarge,
+    UnsupportedImage,
+    make_public_crop,
+    make_thumb,
+    process_upload,
+)
 
 
 def jpeg_bytes(size=(800, 600), color=(200, 50, 50), exif=None, fmt="JPEG"):

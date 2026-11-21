@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -6,7 +6,7 @@ from backend.domain.geo import bbox_around, haversine_m
 from backend.domain.priority import compute_priority
 from tests.helpers import offset
 
-NOW = datetime(2026, 11, 21, tzinfo=timezone.utc)
+NOW = datetime(2026, 11, 21, tzinfo=UTC)
 
 
 def test_haversine_known_distance():

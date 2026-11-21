@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -9,7 +9,7 @@ from backend.services.push import PushService
 from tests.helpers import analyze, detect_pothole, report
 from tests.test_push import FakeSender, subscribe
 
-NOW = datetime.now(timezone.utc)
+NOW = datetime.now(UTC)
 
 
 @pytest.fixture

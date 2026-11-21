@@ -52,3 +52,31 @@ def test_dev_allows_sqlite():
 def test_postgres_url_normalised_to_psycopg3():
     s = Settings(_env_file=None, database_url="postgres://u:p@h/db")
     assert s.database_url.startswith("postgresql+psycopg://")
+
+
+def test_geocoder_off_returns_coordinates(tmp_path):
+    from backend.services.geocode import Geocoder
+
+    s = Settings(_env_file=None, geocoder="off")
+    assert Geocoder(s).reverse(None, 18.5, 73.8).display == "18.50000, 73.80000"
+
+
+def test_dev_falls_back_to_sqlite_when_postgres_unreachable(tmp_path, caplog):
+    from backend.main import create_app
+
+    s = Settings(_env_file=None, app_env="dev", detector="fake", media_dir=str(tmp_path / "m"),
+                 database_url="postgresql+psycopg://u:p@127.0.0.1:1/nope",
+                 dev_sqlite_path=str(tmp_path / "fallback.db"))
+    app = create_app(s)
+    assert str(app.state.engine.url).startswith("sqlite")
+    assert "falling back to SQLite" in caplog.text
+
+
+def test_production_never_falls_back(tmp_path):
+    import pytest as _pytest
+
+    from backend.main import create_app
+
+    s = prod(database_url="postgresql+psycopg://u:p@127.0.0.1:1/nope", detector="fake")
+    with _pytest.raises(RuntimeError, match="unreachable"):
+        create_app(s)

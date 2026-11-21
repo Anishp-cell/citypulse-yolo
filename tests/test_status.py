@@ -3,10 +3,12 @@ import pytest
 from backend.domain.status import (
     ACTIVE_STATUSES,
     PUBLIC_STATUSES,
-    HazardStatus as S,
     InvalidTransition,
     apply_transition,
     can_transition,
+)
+from backend.domain.status import (
+    HazardStatus as S,
 )
 from backend.models import Hazard, StatusEvent, User
 

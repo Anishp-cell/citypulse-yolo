@@ -27,7 +27,7 @@ def test_onnx_matches_ultralytics_reference(detector):
     expected = json.loads((FIXTURES / "pothole_expected.json").read_text())["detections"]
     got = detector.detect(cv2.imread(str(FIXTURES / "pothole.jpg")))
     assert [d.label for d in got] == [e["label"] for e in expected]
-    for d, e in zip(got, expected):
+    for d, e in zip(got, expected, strict=True):
         assert iou(d.box, e["box"]) >= 0.9
         assert abs(d.confidence - e["confidence"]) <= 0.05
 

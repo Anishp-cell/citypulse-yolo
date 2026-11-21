@@ -3,6 +3,7 @@
 from logging.config import fileConfig
 
 from alembic import context
+
 import backend.models  # noqa: F401  (register tables)
 from backend.db import Base, make_engine
 from backend.settings import Settings

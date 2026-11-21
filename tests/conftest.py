@@ -41,8 +41,8 @@ def app(settings):
 
     app = create_app(settings)
     # Never call the real geocoding service from tests.
-    app.state.geocoder = Geocoder(settings, transport=httpx.MockTransport(lambda r: httpx.Response(200, json=FAKE_PLACE)),
-                                  min_interval_s=0)
+    transport = httpx.MockTransport(lambda r: httpx.Response(200, json=FAKE_PLACE))
+    app.state.geocoder = Geocoder(settings, transport=transport, min_interval_s=0)
     return app
 
 

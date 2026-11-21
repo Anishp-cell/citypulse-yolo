@@ -1,7 +1,7 @@
 """Officer/admin console: work queue, status updates, moderation, stats, user roles."""
 
 from collections import Counter
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile
@@ -64,7 +64,7 @@ def set_status(hazard_id: int, request: Request, background: BackgroundTasks,
         raise HTTPException(status_code=422, detail="photo_required")
     image_key = store_photo(request, photo, "proof")
     event = _transition(db, h, to, user, note=note, image_key=image_key)
-    h.priority_score = hazard_priority(h, datetime.now(timezone.utc))
+    h.priority_score = hazard_priority(h, datetime.now(UTC))
     db.commit()
     notify_event(background, request.app, event.id, exclude_user_id=user.id)
     return {"status": h.status.value}
@@ -144,7 +144,7 @@ def merge(hazard_id: int, body: MergeIn, user: User = Depends(require_admin), db
     target.report_count = max(1, reporters.filter(Report.user_id.isnot(None)).distinct().count()
                               + reporters.filter(Report.user_id.is_(None)).count())
     target.first_reported_at = min(aware(target.first_reported_at), aware(source.first_reported_at))
-    target.priority_score = hazard_priority(target, datetime.now(timezone.utc))
+    target.priority_score = hazard_priority(target, datetime.now(UTC))
     _transition(db, source, HazardStatus.rejected, user, note=f"Rejected: duplicate of #{target.id}")
     db.commit()
     return {"merged_into": target.id, "report_count": target.report_count}
@@ -152,7 +152,7 @@ def merge(hazard_id: int, body: MergeIn, user: User = Depends(require_admin), db
 
 @router.get("/stats")
 def stats(_: User = Depends(require_staff), db: Session = Depends(get_db)):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     by_status = {s.value: 0 for s in HazardStatus}
     by_status.update({s.value: n for s, n in db.query(Hazard.status, func.count()).group_by(Hazard.status)})
     by_type = {t: n for t, n in db.query(Hazard.type, func.count()).filter(Hazard.status != HazardStatus.rejected)

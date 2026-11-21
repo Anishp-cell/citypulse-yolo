@@ -2,7 +2,7 @@
 
 import re
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -14,8 +14,16 @@ from backend.db import get_db
 from backend.deps import current_user
 from backend.models import Flag, Follow, PushSubscription, Report, Upload, User, Verification
 from backend.ratelimit import rate_limit
-from backend.security import (SESSION_COOKIE, SESSION_DAYS, create_reset_token, create_session_token,
-                              decode_reset_token, hash_password, reset_token_matches, verify_password)
+from backend.security import (
+    SESSION_COOKIE,
+    SESSION_DAYS,
+    create_reset_token,
+    create_session_token,
+    decode_reset_token,
+    hash_password,
+    reset_token_matches,
+    verify_password,
+)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 auth_limit = Depends(rate_limit("auth", 10, 60))
@@ -137,7 +145,7 @@ def delete_me(response: Response, user: User = Depends(current_user), db: Sessio
     user.city = user.ward = None
     user.hashed_password = "!" + secrets.token_hex(16)
     user.is_active = False
-    user.deleted_at = datetime.now(timezone.utc)
+    user.deleted_at = datetime.now(UTC)
     db.commit()
     response.delete_cookie(SESSION_COOKIE, path="/")
     return {"ok": True}

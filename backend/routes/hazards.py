@@ -2,7 +2,7 @@
 
 import statistics
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -67,7 +67,7 @@ def get_hazard(hazard_id: int, request: Request, user: User | None = Depends(cur
 
 @router.get("/scorecard")
 def scorecard(city: str = Query("Pune", max_length=80), db: Session = Depends(get_db)):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     hazards = (db.query(Hazard).filter(Hazard.city.ilike(city), Hazard.status.in_(list(PUBLIC_STATUSES))).all())
 
     wards: dict[str, list[Hazard]] = defaultdict(list)

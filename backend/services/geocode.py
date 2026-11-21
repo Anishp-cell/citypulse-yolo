@@ -64,6 +64,8 @@ class Geocoder:
         return resp.json()
 
     def reverse(self, db: Session, lat: float, lng: float) -> Place:
+        if self.settings.geocoder == "off":
+            return _fallback(lat, lng)
         key = f"{round(lat, 4):.4f},{round(lng, 4):.4f}"
         cached = db.get(GeocodeCache, key)
         if cached:

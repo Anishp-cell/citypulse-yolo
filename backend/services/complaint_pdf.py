@@ -2,7 +2,8 @@
 grievance dossier, but it states plainly that it is a citizen complaint, not a government document."""
 
 import io
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from xml.sax.saxutils import escape
 
 from reportlab.graphics.barcode.qr import QrCodeWidget
 from reportlab.graphics.shapes import Drawing
@@ -11,7 +12,6 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import HRFlowable, Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-from xml.sax.saxutils import escape
 
 from backend.models import Hazard, aware
 from backend.services.complaint import TYPE_LABELS, city_of, map_link
@@ -67,7 +67,7 @@ def build_pdf(h: Hazard, app_url: str, photo: bytes | None) -> bytes:
 
     story = [
         p("Citizen Road Hazard Complaint", title),
-        p(f"Prepared with CityPulse on {datetime.now(timezone.utc):%d %b %Y}. "
+        p(f"Prepared with CityPulse on {datetime.now(UTC):%d %b %Y}. "
           "This is a complaint from citizens, not a government document.", sub),
         Spacer(1, 8), HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#2563eb")), Spacer(1, 10),
         p(f"To: {city.authority}", label), Spacer(1, 6), table, Spacer(1, 12),

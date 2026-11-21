@@ -5,7 +5,7 @@ import hashlib
 import hmac
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 from urllib.parse import urlencode
@@ -14,7 +14,7 @@ SIGNED_URL_TTL_S = 3600
 
 
 def new_key(prefix: str, ext: str = "jpg") -> str:
-    month = datetime.now(timezone.utc).strftime("%Y%m")
+    month = datetime.now(UTC).strftime("%Y%m")
     return f"{prefix}/{month}/{uuid.uuid4().hex}.{ext}"
 
 

@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     sentry_dsn: str = ""
     locationiq_key: str = ""
     enable_demo: bool = False
+    geocoder: Literal["nominatim", "off"] = "nominatim"
+    dev_sqlite_path: str = str(ROOT / "citypulse-dev.db")
+    log_json: bool = False
     rate_limits_enabled: bool = True
     frontend_dist: str = str(ROOT / "app" / "dist")
 

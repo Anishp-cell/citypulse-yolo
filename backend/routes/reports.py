@@ -1,6 +1,6 @@
 """Reporting flow: analyze a photo (AI + location + nearby hazards), then submit it as a report."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 import cv2
@@ -17,8 +17,14 @@ from backend.domain.status import MERGEABLE_STATUSES, HazardStatus, record_creat
 from backend.ml.detector import POTHOLE, suggest_severity
 from backend.models import HAZARD_TYPES, SEVERITIES, Follow, Hazard, Report, Upload, User
 from backend.ratelimit import DAY, HOUR, rate_limit
-from backend.services.images import MAX_BYTES, ImageTooLarge, UnsupportedImage, make_public_crop, make_thumb, \
-    process_upload
+from backend.services.images import (
+    MAX_BYTES,
+    ImageTooLarge,
+    UnsupportedImage,
+    make_public_crop,
+    make_thumb,
+    process_upload,
+)
 from backend.services.storage import new_key
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
@@ -121,7 +127,7 @@ def submit(body: SubmitIn,
     if upload.consumed_at is not None:
         raise HTTPException(status_code=409, detail="upload_already_used")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     ai = upload.ai or {}
     hazard: Hazard | None = None
     if body.attach_to_hazard_id is not None:

@@ -1,10 +1,9 @@
 """Database schema. Roads and wards are derived from hazards, not stored separately."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from sqlalchemy import (JSON, Boolean, DateTime, Enum, Float, ForeignKey, Index, Integer, String, Text,
-                        UniqueConstraint)
+from sqlalchemy import JSON, Boolean, DateTime, Enum, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
@@ -16,7 +15,7 @@ ROLES = ("citizen", "officer", "admin")
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _enum(*values, name):
@@ -191,5 +190,5 @@ class GeocodeCache(Base):
 def aware(dt: datetime | None) -> datetime | None:
     """SQLite drops tzinfo; every stored timestamp is UTC."""
     if dt is not None and dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
+        return dt.replace(tzinfo=UTC)
     return dt

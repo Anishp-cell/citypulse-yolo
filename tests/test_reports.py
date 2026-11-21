@@ -5,7 +5,6 @@ from fastapi.testclient import TestClient
 from backend.models import Follow, Hazard, Report, StatusEvent, Upload
 from tests.helpers import PUNE, analyze, detect_nothing, detect_pothole, offset, report, submit
 
-
 # ---------- analyze ----------
 
 def test_analyze_returns_ai_and_place(app, citizen):

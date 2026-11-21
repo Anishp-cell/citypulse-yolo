@@ -1,7 +1,7 @@
 """Hazard lifecycle: the single source of truth for which status changes are allowed and by whom."""
 
 import enum
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
@@ -65,7 +65,7 @@ def apply_transition(db: Session, hazard, to: HazardStatus, actor=None, *, role:
     if not can_transition(from_, to, role):
         raise InvalidTransition(f"{role} cannot move hazard from {from_.value} to {to.value}")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     hazard.status = to
     hazard.updated_at = now
     if to == S.fixed_unverified:

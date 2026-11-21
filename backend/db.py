@@ -21,7 +21,18 @@ def make_engine(url: str) -> Engine:
             dbapi_conn.execute("PRAGMA foreign_keys=ON")
 
         return engine
-    return create_engine(url, pool_pre_ping=True, pool_size=5, max_overflow=5)
+    return create_engine(url, pool_pre_ping=True, pool_size=5, max_overflow=5, connect_args={"connect_timeout": 5})
+
+
+def can_connect(engine: Engine) -> bool:
+    from sqlalchemy import text
+
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return True
+    except Exception:
+        return False
 
 
 def make_sessionmaker(engine: Engine) -> sessionmaker[Session]:

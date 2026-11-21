@@ -1,6 +1,6 @@
 """Turns hazards into API payloads. Public payloads never contain reporter identities."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from backend.domain.status import ACTIVE_STATUSES, PUBLIC_STATUSES, HazardStatus
 from backend.models import Follow, Hazard, User, Verification, aware
@@ -9,7 +9,7 @@ REMINDER_PREFIX = "reminder:"
 
 
 def days_open(h: Hazard, now: datetime | None = None) -> int:
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     end = aware(h.fixed_at) if h.status == HazardStatus.fixed and h.fixed_at else now
     return max(0, (end - aware(h.first_reported_at)).days)
 
