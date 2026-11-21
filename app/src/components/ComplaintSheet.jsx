@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Copy, Download, ExternalLink, Mail, MessageCircle, Phone, Share2, TriangleAlert } from 'lucide-react';
 import { useComplaint, useFiled } from '../api/hooks';
 import { errorMessage } from '../lib/format';
-import { copyText, mailtoUrl, shareComplaint, whatsappUrl } from '../lib/share';
+import { copyText, mailtoUrl, prefetchPdf, shareComplaint, whatsappUrl } from '../lib/share';
 import { toast } from './Toaster';
 import { ErrorState, Notice, Sheet, Spinner } from './ui';
 
@@ -47,11 +47,17 @@ export default function ComplaintSheet({ hazardId, open, onClose, canFile = true
   const { t, i18n } = useTranslation();
   const complaint = useComplaint(hazardId, i18n.language, open);
   const c = complaint.data;
+  const [pdfFile, setPdfFile] = useState(null);
+  useEffect(() => {
+    if (!open || !c?.pdf_url) return undefined;
+    let alive = true;
+    prefetchPdf(c.pdf_url, `CityPulse-complaint-${hazardId}.pdf`).then((f) => alive && setPdfFile(f));
+    return () => { alive = false; };
+  }, [open, c?.pdf_url, hazardId]);
 
   const copy = async (text) => toast((await copyText(text)) ? t('common.copied') : t('errors.server_error'));
   const shareAll = async () => {
-    const r = await shareComplaint({ title: c.subject, text: `${c.subject}\n\n${c.body}`, pdfUrl: c.pdf_url,
-      filename: `CityPulse-complaint-${hazardId}.pdf` });
+    const r = await shareComplaint({ title: c.subject, text: `${c.subject}\n\n${c.body}`, file: pdfFile });
     if (r === 'unsupported') copy(`${c.subject}\n\n${c.body}`);
   };
 

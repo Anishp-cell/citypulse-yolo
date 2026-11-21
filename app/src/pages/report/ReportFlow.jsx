@@ -13,11 +13,12 @@ import { toast } from '../../components/Toaster';
 import { Notice, Spinner, TypeLabel } from '../../components/ui';
 import { compressImage } from '../../lib/compressImage';
 import { errorMessage } from '../../lib/format';
-import { DEFAULT_CENTER, getPosition } from '../../lib/geo';
+import { DEFAULT_CENTER, getPosition, haversineM } from '../../lib/geo';
 import { enqueue } from '../../lib/offlineQueue';
 import { HAZARD_TYPES, SEVERITIES } from '../../lib/status';
 
 const GOOD_ACCURACY_M = 100;
+const MIN_PIN_MOVE_M = 5;
 const isOffline = (err) => !navigator.onLine || err?.code === 'network_error';
 
 function Steps({ step }) {
@@ -59,9 +60,10 @@ function PhotoStep({ onPicked }) {
 }
 
 function PinTracker({ onPin, onMoved }) {
+  // Only dragging counts as placing the pin: zooming (wheel, pinch, double-tap) keeps the centre roughly
+  // where it was, so it must not unlock submitting an unplaced default location.
   const map = useMapEvents({
-    dragstart: () => onMoved(),
-    zoomstart: () => onMoved(),
+    dragend: () => onMoved(),
     moveend: () => onPin(map.getCenter()),
   });
   return null;
@@ -75,9 +77,10 @@ function LocationStep({ gps, gpsError, onConfirm, busy }) {
   // arrive after this component first renders, so it must not be frozen into initial state).
   const [dragged, setDragged] = useState(null);
   const [moved, setMoved] = useState(false);
-  const pin = moved && dragged ? dragged : start;
+  const placed = moved && dragged && haversineM(start.lat, start.lng, dragged.lat, dragged.lng) >= MIN_PIN_MOVE_M;
+  const pin = placed ? dragged : start;
   const pinRequired = !precise;
-  const ready = !pinRequired || moved;
+  const ready = !pinRequired || placed;
   const locating = !gps && !gpsError;
 
   return (
@@ -97,8 +100,8 @@ function LocationStep({ gps, gpsError, onConfirm, busy }) {
       )}
       <p className="tiny center">{t('report.pin_hint')}</p>
       <button className="btn btn-primary btn-lg btn-block" disabled={!ready || busy || locating}
-        onClick={() => onConfirm({ lat: pin.lat, lng: pin.lng, accuracy: moved ? null : gps?.accuracy,
-          source: moved || !gps ? 'manual' : 'gps' })}>
+        onClick={() => onConfirm({ lat: pin.lat, lng: pin.lng, accuracy: placed ? null : gps?.accuracy,
+          source: placed || !gps ? 'manual' : 'gps' })}>
         {busy ? <><Spinner />{t('report.analyzing')}</> : ready ? t('report.use_location') : t('report.pin_required')}
       </button>
     </div>
@@ -214,7 +217,7 @@ export default function ReportFlow() {
 
   useEffect(() => {
     if (step !== 'location' || gps || gpsError) return;
-    getPosition().then(setGps).catch((e) => setGpsError(e.code || 'unavailable'));
+    getPosition({ maximumAge: 0 }).then(setGps).catch((e) => setGpsError(e.code || 'unavailable'));
   }, [step, gps, gpsError]);
 
   if (loading) return null;
@@ -230,6 +233,7 @@ export default function ReportFlow() {
 
   const reset = () => {
     setStep('photo'); setFile(null); setLocation(null); setAnalysis(null); setOffline(false); setResult(null);
+    setGps(null); setGpsError(null); // the next hazard is somewhere else: always take a fresh GPS fix
     idemKey.current = crypto.randomUUID();
   };
 

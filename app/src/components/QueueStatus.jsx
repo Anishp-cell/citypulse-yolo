@@ -8,6 +8,8 @@ import { errorMessage } from '../lib/format';
 import { flush, list } from '../lib/offlineQueue';
 import { toast } from './Toaster';
 
+export const RETRY_EVERY_MS = 60_000;
+
 const toFile = (item) => new File([item.bytes], 'photo.jpg', { type: item.mime || 'image/jpeg' });
 
 /** Shows how many offline reports are waiting and sends them when the connection comes back. */
@@ -43,6 +45,19 @@ export default function QueueStatus() {
       window.removeEventListener('cp:queue-changed', onChange);
     };
   }, [sync, refresh]);
+
+  useEffect(() => {
+    if (!count) return undefined;
+    // The server may have been cold or the network flaky when we last tried; keep trying while
+    // anything is queued, and immediately when the app comes back to the foreground.
+    const timer = setInterval(sync, RETRY_EVERY_MS);
+    const onVisible = () => document.visibilityState === 'visible' && sync();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [count, sync]);
 
   if (!count) return null;
   return (

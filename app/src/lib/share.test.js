@@ -1,34 +1,43 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mailtoUrl, shareComplaint, whatsappUrl } from './share';
+import { mailtoUrl, prefetchPdf, shareComplaint, whatsappUrl } from './share';
 
 const original = { share: navigator.share, canShare: navigator.canShare };
 afterEach(() => { navigator.share = original.share; navigator.canShare = original.canShare; });
 
 describe('share', () => {
-  it('shares text plus the PDF file when the browser can share files', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(new Blob(['%PDF'], { type: 'application/pdf' })));
+  it('shares text plus a pre-fetched PDF without awaiting the network inside the tap', async () => {
+    // Review I7: Safari requires navigator.share() to run directly in the user gesture.
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
     navigator.canShare = vi.fn(() => true);
     navigator.share = vi.fn().mockResolvedValue(undefined);
-    const r = await shareComplaint({ title: 'T', text: 'Body', pdfUrl: '/x.pdf', filename: 'c.pdf' });
+    const file = new File(['%PDF'], 'c.pdf', { type: 'application/pdf' });
+    const r = await shareComplaint({ title: 'T', text: 'Body', file });
     expect(r).toBe('shared');
+    expect(fetchSpy).not.toHaveBeenCalled();
     const arg = navigator.share.mock.calls[0][0];
     expect(arg.text).toBe('Body');
     expect(arg.files[0].name).toBe('c.pdf');
-    expect(arg.files[0].type).toBe('application/pdf');
+  });
+
+  it('prefetchPdf returns a named PDF File', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(new Blob(['%PDF'], { type: 'application/pdf' })));
+    const f = await prefetchPdf('/x.pdf', 'c.pdf');
+    expect(f.name).toBe('c.pdf');
+    expect(f.type).toBe('application/pdf');
   });
 
   it('falls back to sharing text only when files are not shareable', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(new Blob(['%PDF'])));
     navigator.canShare = vi.fn(() => false);
     navigator.share = vi.fn().mockResolvedValue(undefined);
-    expect(await shareComplaint({ title: 'T', text: 'Body', pdfUrl: '/x.pdf', filename: 'c.pdf' })).toBe('shared_text');
+    const file = new File(['%PDF'], 'c.pdf', { type: 'application/pdf' });
+    expect(await shareComplaint({ title: 'T', text: 'Body', file })).toBe('shared_text');
     expect(navigator.share.mock.calls[0][0].files).toBeUndefined();
   });
 
   it('reports unsupported when there is no Web Share API', async () => {
     navigator.share = undefined;
     navigator.canShare = undefined;
-    expect(await shareComplaint({ title: 'T', text: 'B', pdfUrl: '/x.pdf' })).toBe('unsupported');
+    expect(await shareComplaint({ title: 'T', text: 'B' })).toBe('unsupported');
   });
 
   it('treats the user closing the share sheet as cancelled, not an error', async () => {
