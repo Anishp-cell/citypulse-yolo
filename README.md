@@ -1,208 +1,150 @@
-# CityPulse — AI-Powered Road Safety Platform
+# CityPulse
 
-> Real-time accident & pothole detection · Severity-based emergency guidance · Automated authority alerts
+**Report road hazards. Get them fixed.**
 
-[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![YOLOv8](https://img.shields.io/badge/YOLOv8-Ultralytics-blue?style=flat-square)](https://ultralytics.com)
-[![Gemini AI](https://img.shields.io/badge/Gemini-2.0_Flash-4285F4?style=flat-square&logo=google&logoColor=white)](https://ai.google.dev)
+CityPulse is an installable web app (PWA) for citizens. Snap a photo of a pothole, open manhole or
+waterlogged road. CityPulse checks the photo with an on-server AI model, tags the exact spot, merges
+duplicate reports, writes a ready-to-send complaint for your city, and keeps everyone who follows the
+hazard updated until neighbours confirm it has been fixed.
 
----
+It works in English, हिन्दी and मराठी. Pune is the pilot city.
 
-## The Problem
+## What people can do
 
-Road accidents kill **1.35 million people every year** (WHO) and injure up to 50 million more. Infrastructure failures — potholes, deteriorating roads — cause thousands of additional preventable incidents. Emergency response is slow because:
+**Citizens**
+- **Report in under a minute.** Take a photo, which is compressed on the phone. GPS tags the spot, and
+  placing a pin on the map is required when GPS is off or imprecise. The AI suggests "pothole" and a
+  severity, and the person confirms. Reports of the same hazard within 20 m are merged as a "+1".
+- **Send it to the city.** One tap shares the complaint text and PDF on WhatsApp or by email, or
+  opens the city's grievance portal (PMC CARE for Pune). The citizen can then record the official
+  complaint number. Citizens send complaints themselves; CityPulse never emails officials on anyone's
+  behalf.
+- **Track it.** Each hazard has a public page with its full history, and push notifications arrive
+  when its status changes. After 7 days the app reminds the reporter to file it, and after 21 days
+  without action it suggests escalating (Aaple Sarkar / CPGRAMS).
+- **Confirm repairs.** When someone says a hazard is fixed, followers are asked to confirm.
+  2 "fixed" votes close it; 2 "still there" votes reopen it with higher priority.
+- **Map and city scorecard.** A public map of active and fixed hazards, plus ward-level stats
+  (active count, median days to fix, % fixed within 30 days) and the worst roads.
+- **Emergency mode.** One-tap 112 / 108 / 100 calls, a "share my location" button and plain first-aid
+  steps. It works offline and uses no AI.
+- **Works on bad networks.** Reports made offline are stored on the phone and sent automatically
+  later, without creating duplicates.
 
-- **No automated detection** — accidents are reported manually, minutes after they happen
-- **No bystander guidance** — most people do not know what to do at the scene
-- **No systematic infrastructure tracking** — road defect data is fragmented and unactionable
+**Officers and admins** (`/admin`): a work queue sorted by priority, status updates (a repair photo is
+required for "fixed"), moderation of unverified or flagged reports (approve, reject, merge duplicates),
+a dashboard, a heatmap, and user roles.
 
-CityPulse addresses all three with a single AI-powered platform, deployable by any city government worldwide.
-
----
-
-## What CityPulse Does
-
-Upload an image or video of any road scene. In under 2 seconds:
-
-1. **Detects** accidents and potholes using a custom-trained YOLOv8 model (6 severity classes)
-2. **Generates** actionable first-aid guidance via Gemini 2.0 Flash AI
-3. **Alerts** emergency services and municipal departments via real SMS (Twilio) and email (SendGrid)
-4. **Logs** every incident with severity, location, and annotated imagery to a persistent database
-
----
+**Privacy:** the public only ever sees a crop around the hazard, with photo metadata stripped.
+Reporter identities are never shown. Users can delete their account at any time; their reports stay,
+anonymised.
 
 ## Architecture
 
 ```
-User / Field Officer
-       |  Upload image or video
-       v
-  FastAPI Backend  -->  YOLOv8n Model  -->  Annotated image + detections
-       |                                          |
-       v                                          v
-  PostgreSQL DB                          Gemini 2.0 Flash
-  (Incidents, Users,                     (Medical guidance)
-   Notifications)
-       |
-       v
-  Notification Service
-  |-- SendGrid  ->  Email to authorities
-  `-- Twilio    ->  SMS to emergency contact
+Browser (PWA: React + Vite, service worker, IndexedDB offline queue)
+        │  same origin, cookie session + CSRF header
+        ▼
+FastAPI (one container on Render)
+  ├─ ONNX Runtime pothole detector (YOLOv8n, CPU)
+  ├─ PostgreSQL (Neon) via SQLAlchemy + Alembic
+  ├─ Cloudflare R2: public crops/thumbnails + private full photos (signed URLs)
+  ├─ Web Push (VAPID) · SMTP for password resets only
+  └─ /api/internal/jobs/daily ← GitHub Actions cron (reminders, auto-confirm, cleanup)
 ```
 
-### Detection Classes
-
-| Class | Emergency Level | Response |
-|---|---|---|
-| `no_accident` | 0 | Safe — no action |
-| `minor_accident` | 1 | Document, exchange info, monitor for symptoms |
-| `moderate_accident` | 2 | Call emergency services, stabilise victim |
-| `severe_accident` | 3 | Immediate dispatch, CPR, spinal care |
-| `totaled_vehicle` | 4 | Multi-casualty protocol, fire check |
-| `pothole` | — | Municipal repair request |
-
-### Model Performance
-
-| Metric | Value |
+| Path | What's there |
 |---|---|
-| Precision | 0.63 |
-| Recall | 0.63 |
-| mAP@50 | 0.57 |
-| mAP@50-95 | 0.33 |
-| Inference Speed (GPU) | ~25 FPS |
-| Training Images | 6,422 |
+| `backend/` | API (`routes/`), domain rules (`domain/status.py` is the hazard lifecycle), services, `ml/detector.py` |
+| `backend/alembic/` | database migrations |
+| `app/` | the PWA (citizen app + officer console), `e2e/` Playwright tests |
+| `tests/` | backend tests (pytest) |
+| `ml_scripts/` | training/evaluation scripts (need `requirements-ml.txt`) |
+| `docs/` | design, implementation plan, archived early docs |
 
----
+## Run it locally
 
-## Tech Stack
+Requirements: Python 3.11 and Node 22.
 
-| Layer | Technology |
+```bash
+python -m venv venv && venv/Scripts/activate        # macOS/Linux: source venv/bin/activate
+pip install -r requirements-dev.txt
+cp .env.example .env                                 # defaults are fine for local use (SQLite, local media)
+
+cd app && npm ci && npm run build && cd ..
+alembic upgrade head
+python -m backend.cli create-admin --email you@example.com
+uvicorn backend.main:create_app --factory --reload   # http://localhost:8000
+```
+
+For frontend work with hot reload, run `npm run dev` in `app/` (http://localhost:5173). It proxies API
+calls to port 8000.
+
+Camera, GPS and push only work on `localhost` or HTTPS. To try it on a phone, use a tunnel such as
+`cloudflared tunnel --url http://localhost:8000`.
+
+## Tests
+
+```bash
+pytest -q                          # backend: ~190 tests (SQLite)
+ruff check backend tests
+cd app
+npm test                           # unit/component tests (Vitest)
+npm run lint
+npm run build && npx playwright test   # end-to-end: real backend, real model, temporary DB
+```
+
+CI (`.github/workflows/ci.yml`) runs all of these, applies migrations to PostgreSQL 16, and checks
+that the Docker image starts and passes its health check.
+
+## Deploy (free / cheap tier)
+
+1. **Database:** create a [Neon](https://neon.tech) project and copy its connection string.
+2. **Media:** create two [Cloudflare R2](https://developers.cloudflare.com/r2/) buckets,
+   `citypulse-public` (enable public access, e.g. its r2.dev URL) and `citypulse-private` (keep it
+   private). Then create an API token with read/write access to both.
+3. **Push keys:** run `npx web-push generate-vapid-keys`.
+4. **Email (password reset):** any SMTP provider. Brevo's free tier works with a single verified sender.
+5. **Render:** New → Blueprint → pick this repo (`render.yaml`), then fill in the variables marked
+   `sync: false`. The container runs `alembic upgrade head` on every start. The free plan sleeps after
+   15 minutes idle (the first request then takes about a minute, and the app shows "connecting to the
+   server…"). Starter at $7/month stays awake.
+6. **First admin:** in the Render shell, run `python -m backend.cli create-admin --email you@example.com`.
+7. **Daily job:** in GitHub → Settings → Secrets → Actions, add `APP_URL` and `JOB_TOKEN` (the same
+   value as on Render). `.github/workflows/daily-job.yml` runs at 06:00 IST.
+8. **Monitoring (optional):** set `SENTRY_DSN`, and point an uptime monitor at `/health`.
+
+In production (`APP_ENV=production`) the app refuses to start with a default secret key, a non-Postgres
+database, or local media storage.
+
+### Configuration
+
+All settings are environment variables. See `.env.example` for the full list.
+
+| Variable | Purpose |
 |---|---|
-| Object Detection | YOLOv8n (Ultralytics) + PyTorch |
-| AI Guidance | Google Gemini 2.0 Flash Lite |
-| Backend API | FastAPI + SQLAlchemy + PostgreSQL |
-| Authentication | JWT (python-jose) + bcrypt |
-| Notifications | SendGrid (email) + Twilio (SMS) |
-| Frontend | Vanilla HTML/CSS/JS (single-page app) |
-| Deployment | Docker + Google Cloud Run |
+| `APP_ENV` | `dev`, `test` or `production` |
+| `APP_URL` | public URL, used in share links, emails and push |
+| `SECRET_KEY` | signs sessions and reset links (≥32 random chars) |
+| `DATABASE_URL` | PostgreSQL URL (`postgres://` is accepted) |
+| `STORAGE_BACKEND`, `R2_*` | media storage |
+| `VAPID_*` | web push; push is disabled when unset |
+| `SMTP_*` | password-reset email; links are logged when unset |
+| `JOB_TOKEN` | protects the daily job endpoint |
+| `GEOCODER`, `LOCATIONIQ_KEY` | reverse geocoding (Nominatim by default, LocationIQ if a key is set) |
+| `SENTRY_DSN`, `LOG_JSON` | observability |
 
----
+### City contact details
 
-## API Endpoints
+Where complaints go is configured in `backend/cities.py`. The Pune contacts (PMC CARE portal, email,
+WhatsApp, helpline, Aaple Sarkar escalation) came from public sources and are marked `verified=False`,
+so the app shows a "please double-check" note. Confirm them on the official PMC website and set
+`verified=True`. Adding a city means adding one `CityConfig` entry.
 
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `POST` | `/auth/register` | None | Create account |
-| `POST` | `/auth/login` | None | Get JWT token |
-| `GET` | `/auth/me` | JWT | Current user info |
-| `POST` | `/api/analyze` | JWT | Analyze image |
-| `POST` | `/api/analyze-video` | JWT | Analyze video |
-| `POST` | `/api/notify` | JWT | Send real SMS + email alert |
-| `GET` | `/api/incidents` | JWT | List incidents (RBAC) |
-| `GET` | `/api/incidents/{id}` | JWT | Get incident detail |
-| `PATCH` | `/api/incidents/{id}/status` | Officer/Admin | Update status |
-| `GET` | `/health` | None | Health check |
-| `GET` | `/docs` | None | Swagger UI |
+## The model
 
----
-
-## Getting Started
-
-### Prerequisites
-
-- Python 3.10+
-- PostgreSQL 14+ with PostGIS extension
-- (Optional) CUDA GPU for faster inference
-
-### 1. Clone & install
-
-```bash
-git clone https://github.com/Anishp-cell/citypulse-yolo.git
-cd citypulse-yolo
-pip install -r requirements.txt
-```
-
-### 2. Configure environment
-
-```bash
-cp .env.example .env
-# Edit .env with your values — see .env.example for all variables
-```
-
-Minimum required:
-
-```env
-SECRET_KEY=<generate: python -c "import secrets; print(secrets.token_hex(32))">
-DATABASE_URL=postgresql://user:password@localhost:5432/citypulse
-GEMINI_API_KEY=your-gemini-key
-```
-
-For real notifications, also set:
-
-```env
-SENDGRID_API_KEY=SG.xxxxx
-SENDGRID_FROM_EMAIL=noreply@your-domain.com
-ALERT_EMAIL=emergency@your-city.gov
-
-TWILIO_ACCOUNT_SID=ACxxxxx
-TWILIO_AUTH_TOKEN=xxxxx
-TWILIO_FROM_PHONE=+1XXXXXXXXXX
-ALERT_PHONE=+1XXXXXXXXXX
-```
-
-### 3. Run
-
-```bash
-uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-Open http://localhost:8000 — you will be prompted to register or sign in.
-
-### 4. Docker
-
-```bash
-docker build -t citypulse .
-docker run -p 8000:8000 --env-file .env citypulse
-```
-
----
-
-## Security
-
-- JWT authentication enforced on all `/api/*` endpoints
-- Role-based access control: `citizen` / `officer` / `admin`
-- CORS restricted to `ALLOWED_ORIGINS` env var (defaults to `localhost:8000`)
-- File upload validation: type checking + 50 MB image / 500 MB video size limits
-- All secrets via environment variables — never hardcoded
-- Startup warning emitted if default `SECRET_KEY` is still in use
-
----
-
-## Business Model
-
-CityPulse is sold as a SaaS platform to city governments and smart city operators worldwide.
-
-| Tier | Target | Pricing |
-|---|---|---|
-| City License — Standard | Cities under 1M population | $20,000–40,000/year |
-| City License — Metro | Cities over 1M population | $80,000–150,000/year |
-| Per-Camera License | CCTV network integrations | $100–200/camera/year |
-| On-Premise Deployment | Government data centre requirements | Custom |
-
-Citizen access is always free — funded by the government contract.
-
----
-
-## Roadmap
-
-- [ ] Mobile app (React Native) for citizen reporting and field officers
-- [ ] Live CCTV / RTSP stream ingestion
-- [ ] Multi-language support (auto-detect locale, translate guidance)
-- [ ] Model retraining pipeline from live incident data (target mAP@50 > 0.75)
-- [ ] Government API integrations (emergency dispatch, road management systems)
-- [ ] Admin analytics dashboard with incident heatmaps
-
----
-
-Built for safer cities everywhere.
+`backend/ml/models/pothole-v1.onnx` is a YOLOv8n trained on about 6,400 road images (6 classes; only
+`pothole` is used). Overall mAP@50 is 0.57. That's why the AI only *suggests*: people confirm the type
+and severity, reports the model doesn't recognise go to a moderator instead of being rejected, and
+neighbours verify repairs. Retraining scripts are in `ml_scripts/`. After exporting a new ONNX file,
+regenerate the reference fixture with `ml_scripts/make_detector_fixture.py`.
