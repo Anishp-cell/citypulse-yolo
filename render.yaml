@@ -1,0 +1,55 @@
+# Render blueprint: https://render.com/docs/blueprint-spec
+# Create the service with "New > Blueprint" and fill in the variables marked sync:false.
+services:
+  - type: web
+    name: citypulse
+    runtime: docker
+    plan: starter          # "free" also works but sleeps after 15 minutes idle (first request ~1 min)
+    region: singapore      # closest Render region to India
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_URL          # e.g. https://citypulse.onrender.com (no trailing slash)
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL     # Neon connection string (postgres://...?sslmode=require)
+        sync: false
+      - key: STORAGE_BACKEND
+        value: r2
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_PUBLIC_BUCKET
+        value: citypulse-public
+      - key: R2_PRIVATE_BUCKET
+        value: citypulse-private
+      - key: R2_PUBLIC_BASE_URL   # the public bucket's r2.dev or custom-domain URL
+        sync: false
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        sync: false
+      - key: SMTP_HOST        # required in production (password-reset email)
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: JOB_TOKEN
+        generateValue: true
+      - key: SENTRY_DSN
+        sync: false
+      - key: LOCATIONIQ_KEY
+        sync: false

@@ -1,0 +1,4 @@
+# Training / evaluation only (ml_scripts/). Not installed in production.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.3.1
+ultralytics==8.3.0

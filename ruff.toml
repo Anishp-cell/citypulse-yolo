@@ -1,0 +1,18 @@
+line-length = 120
+target-version = "py311"
+extend-exclude = ["backend/alembic/versions", "ml_scripts", "app", "venv", "data", "runs", "runs_citypulse"]
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = [
+  "B008",   # FastAPI Depends()/File() defaults are idiomatic
+  "B904",   # HTTPException raised from except blocks on purpose
+  "UP042",  # str+Enum keeps SQLAlchemy/pydantic value handling simple
+]
+
+[lint.per-file-ignores]
+"backend/services/push.py" = ["E501"]  # translated message table
+"backend/services/complaint.py" = ["E501"]
+
+[lint.isort]
+known-first-party = ["backend", "tests"]
