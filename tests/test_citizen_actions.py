@@ -123,15 +123,9 @@ def test_officer_proof_plus_one_citizen_vote_confirms(app, make_user):
     a, _ = make_user()
     o, _ = make_user("officer")
     hid = new_hazard(app, a)
-    o.post(f"/api/admin/hazards/{hid}/status", data={"to": "fixed_unverified", "note": "patched"},
-           files={"photo": ("p.jpg", jpeg(), "image/jpeg")})
-    if hazard(app, hid).status.value != "fixed_unverified":  # admin API arrives in Task 2.6
-        from backend.domain.status import apply_transition
-
-        with app.state.SessionLocal() as db:
-            h = db.get(Hazard, hid)
-            apply_transition(db, h, "fixed_unverified", role="officer")
-            db.commit()
+    r = o.post(f"/api/admin/hazards/{hid}/status", data={"to": "fixed_unverified", "note": "patched"},
+               files={"photo": ("p.jpg", jpeg(), "image/jpeg")})
+    assert r.status_code == 200
     assert vote(a, hid, True).json()["status"] == "fixed"
 
 
