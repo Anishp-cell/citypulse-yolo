@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from backend.db import get_db
 from backend.deps import current_user
 from backend.models import Flag, Follow, PushSubscription, Report, Upload, User, Verification
-from backend.ratelimit import rate_limit
+from backend.ratelimit import HOUR, check_limit, rate_limit
 from backend.security import (
     SESSION_COOKIE,
     SESSION_DAYS,
@@ -105,6 +105,7 @@ def register(body: RegisterIn, request: Request, response: Response, db: Session
 
 @router.post("/login", response_model=UserOut, dependencies=[auth_limit])
 def login(body: LoginIn, request: Request, response: Response, db: Session = Depends(get_db)):
+    check_limit(request, "login-email", body.email, 10, 15 * 60)  # stops password guessing across many IPs
     user = db.query(User).filter(User.email == body.email).first()
     if not user or not user.is_active or not verify_password(body.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="invalid_credentials")
@@ -154,6 +155,7 @@ def delete_me(response: Response, user: User = Depends(current_user), db: Sessio
 @router.post("/forgot-password", dependencies=[auth_limit])
 def forgot_password(body: ForgotIn, request: Request, db: Session = Depends(get_db)):
     email = body.email.strip().lower()
+    check_limit(request, "forgot-email", email, 3, HOUR)  # protects inboxes and the SMTP quota
     user = db.query(User).filter(User.email == email, User.is_active.is_(True)).first()
     if user:
         settings = request.app.state.settings

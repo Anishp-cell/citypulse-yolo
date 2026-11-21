@@ -1,4 +1,5 @@
 import itertools
+import os
 
 import httpx
 import pytest
@@ -21,7 +22,7 @@ def settings(tmp_path):
         app_env="test",
         app_url="http://testserver",
         secret_key="test-secret-key-0123456789abcdef",
-        database_url=f"sqlite:///{tmp_path / 'test.db'}",
+        database_url=os.environ.get("TEST_DATABASE_URL") or f"sqlite:///{tmp_path / 'test.db'}",
         media_dir=str(tmp_path / "media"),
         detector="fake",
         rate_limits_enabled=False,
@@ -39,6 +40,13 @@ FAKE_PLACE = {
 def app(settings):
     from backend.services.geocode import Geocoder
 
+    if settings.database_url.startswith("postgresql"):  # CI: fresh schema per test on a real Postgres
+        import backend.models  # noqa: F401
+        from backend.db import Base, make_engine
+
+        engine = make_engine(settings.database_url)
+        Base.metadata.drop_all(engine)
+        engine.dispose()
     app = create_app(settings)
     # Never call the real geocoding service from tests.
     transport = httpx.MockTransport(lambda r: httpx.Response(200, json=FAKE_PLACE))

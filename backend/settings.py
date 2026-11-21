@@ -84,6 +84,10 @@ class Settings(BaseSettings):
             raise SettingsError("DATABASE_URL must point to PostgreSQL in production")
         if self.storage_backend != "r2":
             raise SettingsError("STORAGE_BACKEND must be 'r2' (Cloudflare R2) in production; local disk is ephemeral")
+        if not self.smtp_host or not self.smtp_from:
+            raise SettingsError("SMTP_HOST and SMTP_FROM are required in production (password reset emails)")
+        if not self.app_url.startswith("https://"):
+            raise SettingsError("APP_URL must be the public https:// address in production")
         required = ["r2_account_id", "r2_access_key_id", "r2_secret_access_key", "r2_public_bucket",
                     "r2_private_bucket", "r2_public_base_url"]
         missing = [name.upper() for name in required if not getattr(self, name)]

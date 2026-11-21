@@ -16,6 +16,9 @@ def prod(**kw):
         r2_public_bucket="pub",
         r2_private_bucket="priv",
         r2_public_base_url="https://media.example.com",
+        smtp_host="smtp.example.com",
+        smtp_from="noreply@example.com",
+        app_url="https://citypulse.example.com",
     )
     base.update(kw)
     return Settings(**base)
@@ -80,3 +83,14 @@ def test_production_never_falls_back(tmp_path):
     s = prod(database_url="postgresql+psycopg://u:p@127.0.0.1:1/nope", detector="fake")
     with _pytest.raises(RuntimeError, match="unreachable"):
         create_app(s)
+
+
+def test_prod_requires_smtp_for_password_reset():
+    # Review I3: without SMTP, reset links would only exist in logs.
+    with pytest.raises(SettingsError, match="SMTP"):
+        prod(smtp_host="").validate_for_env()
+
+
+def test_prod_requires_https_app_url():
+    with pytest.raises(SettingsError, match="APP_URL"):
+        prod(app_url="http://localhost:8000").validate_for_env()

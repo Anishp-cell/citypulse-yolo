@@ -160,3 +160,27 @@ def test_my_reports_following_and_impact(app, make_user):
     impact = a.get("/api/me/impact").json()
     assert impact == {"reports": 1, "hazards_reported": 1, "hazards_fixed": 0, "verifications": 1}
     assert b.get("/api/me/impact").json()["hazards_fixed"] == 1
+
+
+def test_officer_proof_disputed_by_citizen_reopens(app, make_user):
+    # Review I5: an officer "fix" that the only follower disputes must not hide the hazard as fixed.
+    a, _ = make_user()
+    o, _ = make_user("officer")
+    hid = new_hazard(app, a)
+    o.post(f"/api/admin/hazards/{hid}/status", data={"to": "fixed_unverified"},
+           files={"photo": ("p.jpg", jpeg(), "image/jpeg")})
+    r = vote(a, hid, False)
+    assert r.status_code == 200 and r.json()["status"] == "open"
+
+
+def test_long_flag_details_stored_within_column_limit(app, make_user):
+    # Review I8: Flag.reason is String(300); Postgres rejects longer values with a 500.
+    a, _ = make_user()
+    b, _ = make_user()
+    hid = new_hazard(app, a)
+    r = b.post(f"/api/hazards/{hid}/flag", json={"reason": "inappropriate_photo", "details": "x" * 300})
+    assert r.status_code == 200
+    from backend.models import Flag
+
+    with app.state.SessionLocal() as db:
+        assert len(db.query(Flag).one().reason) <= 300

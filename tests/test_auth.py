@@ -158,3 +158,32 @@ def test_cli_create_admin(app, settings):
         assert u.role == "admin"
     # Running it again promotes/updates instead of failing.
     create_admin(settings, "boss@example.com", "admin-password-2")
+
+
+def test_rate_limit_ignores_spoofed_forwarded_for(app, client):
+    # Review I2: the client controls the left-most X-Forwarded-For entry; the proxy appends the real one.
+    app.state.settings.rate_limits_enabled = True
+    codes = [client.post("/api/auth/login", json={"email": "x@example.com", "password": "whatever1"},
+                         headers={"X-Forwarded-For": f"10.0.0.{i}, 203.0.113.7"}).status_code for i in range(11)]
+    assert codes[10] == 429
+
+
+def test_login_limited_per_email_across_ips(app, client):
+    app.state.settings.rate_limits_enabled = True
+    codes = [client.post("/api/auth/login", json={"email": "victim@example.com", "password": "guess-pass"},
+                         headers={"X-Forwarded-For": f"198.51.100.{i}"}).status_code for i in range(11)]
+    assert codes[:10] == [401] * 10 and codes[10] == 429
+
+
+def test_forgot_password_limited_per_email(app, client):
+    app.state.settings.rate_limits_enabled = True
+    codes = [client.post("/api/auth/forgot-password", json={"email": "victim@example.com"},
+                         headers={"X-Forwarded-For": f"198.51.100.{i}"}).status_code for i in range(4)]
+    assert codes[:3] == [200] * 3 and codes[3] == 429
+
+
+def test_console_mailer_never_logs_reset_token_in_production_like_mode(caplog):
+    from backend.services.mailer import ConsoleMailer
+
+    ConsoleMailer(log_body=False).send("a@example.com", "Reset", "link token=SECRET123")
+    assert "SECRET123" not in caplog.text

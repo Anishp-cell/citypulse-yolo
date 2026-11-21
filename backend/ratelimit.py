@@ -18,6 +18,9 @@ class RateLimiter:
         """Record a hit; return False if the key is over its limit."""
         now = time.monotonic()
         with self._lock:
+            if len(self._hits) > 50_000:  # drop idle keys so spoofed keys cannot grow memory forever
+                for k in [k for k, v in self._hits.items() if not v or v[-1] <= now - 86400]:
+                    del self._hits[k]
             q = self._hits[key]
             while q and q[0] <= now - window_s:
                 q.popleft()
@@ -37,9 +40,23 @@ def client_key(request: Request) -> str:
         uid = decode_session_token(token, request.app.state.settings.secret_key)
         if uid is not None:
             return f"user:{uid}"
+    return f"ip:{client_ip(request)}"
+
+
+def client_ip(request: Request) -> str:
+    # Render's proxy appends the address it saw; everything to its left is client-supplied and untrusted.
     forwarded = request.headers.get("x-forwarded-for")
-    ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "unknown")
-    return f"ip:{ip}"
+    if forwarded:
+        return forwarded.split(",")[-1].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def check_limit(request: Request, bucket: str, key: str, limit: int, window_s: float) -> None:
+    """Imperative variant for keys only known inside the handler (e.g. the email being logged into)."""
+    if not request.app.state.settings.rate_limits_enabled:
+        return
+    if not request.app.state.rate_limiter.hit(f"{bucket}:{key}", limit, window_s):
+        raise HTTPException(status_code=429, detail="rate_limited")
 
 
 def rate_limit(bucket: str, limit: int, window_s: float):

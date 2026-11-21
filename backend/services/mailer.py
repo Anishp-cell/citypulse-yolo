@@ -7,17 +7,24 @@ from email.message import EmailMessage
 from backend.settings import Settings
 
 log = logging.getLogger("citypulse.mail")
+OUTBOX_MAX = 100
 
 
 class ConsoleMailer:
-    """Dev/test mailer: keeps messages in memory and logs them."""
+    """Dev/test mailer: keeps recent messages in memory. Logs bodies only when `log_body` (never in
+    production, because a body can contain a password-reset token)."""
 
-    def __init__(self):
+    def __init__(self, log_body: bool = True):
         self.outbox: list[dict] = []
+        self.log_body = log_body
 
     def send(self, to: str, subject: str, body: str) -> None:
         self.outbox.append({"to": to, "subject": subject, "body": body})
-        log.info("email to %s: %s\n%s", to, subject, body)
+        del self.outbox[:-OUTBOX_MAX]
+        if self.log_body:
+            log.info("email to %s: %s\n%s", to, subject, body)
+        else:
+            log.info("email to %s suppressed (no SMTP configured): %s", to, subject)
 
 
 class SmtpMailer:
@@ -42,4 +49,6 @@ class SmtpMailer:
 
 
 def build_mailer(settings: Settings):
-    return SmtpMailer(settings) if settings.smtp_host else ConsoleMailer()
+    if settings.smtp_host:
+        return SmtpMailer(settings)
+    return ConsoleMailer(log_body=settings.app_env != "production")

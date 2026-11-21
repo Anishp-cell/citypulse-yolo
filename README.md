@@ -104,7 +104,8 @@ that the Docker image starts and passes its health check.
    `citypulse-public` (enable public access, e.g. its r2.dev URL) and `citypulse-private` (keep it
    private). Then create an API token with read/write access to both.
 3. **Push keys:** run `npx web-push generate-vapid-keys`.
-4. **Email (password reset):** any SMTP provider. Brevo's free tier works with a single verified sender.
+4. **Email (password reset, required):** any SMTP provider. Brevo's free tier works with a single
+   verified sender. Production refuses to start without `SMTP_HOST` and `SMTP_FROM`.
 5. **Render:** New → Blueprint → pick this repo (`render.yaml`), then fill in the variables marked
    `sync: false`. The container runs `alembic upgrade head` on every start. The free plan sleeps after
    15 minutes idle (the first request then takes about a minute, and the app shows "connecting to the
@@ -129,7 +130,7 @@ All settings are environment variables. See `.env.example` for the full list.
 | `DATABASE_URL` | PostgreSQL URL (`postgres://` is accepted) |
 | `STORAGE_BACKEND`, `R2_*` | media storage |
 | `VAPID_*` | web push; push is disabled when unset |
-| `SMTP_*` | password-reset email; links are logged when unset |
+| `SMTP_*` | password-reset email (required in production; in dev, links are logged) |
 | `JOB_TOKEN` | protects the daily job endpoint |
 | `GEOCODER`, `LOCATIONIQ_KEY` | reverse geocoding (Nominatim by default, LocationIQ if a key is set) |
 | `SENTRY_DSN`, `LOG_JSON` | observability |

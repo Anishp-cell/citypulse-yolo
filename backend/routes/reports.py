@@ -1,5 +1,6 @@
 """Reporting flow: analyze a photo (AI + location + nearby hazards), then submit it as a report."""
 
+import threading
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -28,12 +29,18 @@ from backend.services.images import (
 from backend.services.storage import new_key
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
+# Decoding + inference is memory-heavy; never run more than two at once on a 512 MB instance.
+_ANALYZE_SLOTS = threading.BoundedSemaphore(2)
 
 AI_MIN_CONFIDENCE = 0.25
 NEARBY_RADIUS_M = 30.0
 MERGE_RADIUS_M = 20.0
 ATTACH_MAX_M = 50.0
 SEVERITY_ORDER = {s: i for i, s in enumerate(SEVERITIES)}
+
+
+def _clip(value: str | None, n: int) -> str | None:
+    return value[:n] if value else value
 
 
 def _nearby(db: Session, lat: float, lng: float, radius_m: float, hazard_type: str | None = None):
@@ -63,15 +70,16 @@ def analyze(request: Request,
     if abs(lat) < 1e-6 and abs(lng) < 1e-6:
         raise HTTPException(status_code=422, detail="invalid_location")
     raw = file.file.read(MAX_BYTES + 1)
-    try:
-        img = process_upload(raw)
-    except ImageTooLarge:
-        raise HTTPException(status_code=413, detail="image_too_large")
-    except UnsupportedImage:
-        raise HTTPException(status_code=415, detail="unsupported_image")
-
-    bgr = cv2.imdecode(np.frombuffer(img.full_jpeg, np.uint8), cv2.IMREAD_COLOR)
-    dets = [d for d in request.app.state.detector.detect(bgr) if d.label == POTHOLE]
+    with _ANALYZE_SLOTS:
+        try:
+            img = process_upload(raw)
+        except ImageTooLarge:
+            raise HTTPException(status_code=413, detail="image_too_large")
+        except UnsupportedImage:
+            raise HTTPException(status_code=415, detail="unsupported_image")
+        del raw
+        bgr = cv2.imdecode(np.frombuffer(img.full_jpeg, np.uint8), cv2.IMREAD_COLOR)
+        dets = [d for d in request.app.state.detector.detect(bgr) if d.label == POTHOLE]
     boxes = [list(d.box) for d in dets]
     confidence = round(max((d.confidence for d in dets), default=0.0), 4)
     ai = {"is_pothole": confidence >= AI_MIN_CONFIDENCE, "confidence": confidence,
@@ -145,8 +153,9 @@ def submit(body: SubmitIn,
         place = upload.place or {}
         hazard = Hazard(type=body.hazard_type, severity=body.severity, lat=upload.lat, lng=upload.lng,
                         status=HazardStatus.open if ai_ok else HazardStatus.pending_review, ai_verified=ai_ok,
-                        address=place.get("display"), road=place.get("road"), ward=place.get("ward"),
-                        city=place.get("city"), cover_image_key=upload.public_image_key, report_count=1,
+                        address=_clip(place.get("display"), 300), road=_clip(place.get("road"), 200),
+                        ward=_clip(place.get("ward"), 120), city=_clip(place.get("city"), 80),
+                        cover_image_key=upload.public_image_key, report_count=1,
                         first_reported_at=now, last_reported_at=now, updated_at=now)
         db.add(hazard)
         db.flush()

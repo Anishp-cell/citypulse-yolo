@@ -1,13 +1,14 @@
 """Photo handling: validate by content, fix orientation, strip metadata, crop for public display."""
 
 import io
+import warnings
 from dataclasses import dataclass
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 MAX_BYTES = 10 * 1024 * 1024
 MAX_SIDE = 2048
-MAX_PIXELS = 40_000_000
+MAX_PIXELS = 25_000_000  # ~25 MP: above any phone camera after our client-side resize
 ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP", "MPO"}  # MPO = multi-picture JPEG some phones produce
 JPEG_QUALITY = 85
 
@@ -42,8 +43,18 @@ def process_upload(raw: bytes) -> ProcessedImage:
         img = Image.open(io.BytesIO(raw))
         if img.format not in ALLOWED_FORMATS:
             raise UnsupportedImage(f"unsupported format {img.format}")
-        img.load()
-    except (UnidentifiedImageError, Image.DecompressionBombError, OSError, SyntaxError) as e:
+        if img.width * img.height > MAX_PIXELS:  # check the header before allocating anything
+            raise ImageTooLarge("image has too many pixels")
+        if img.format in ("JPEG", "MPO"):
+            img.draft("RGB", (MAX_SIDE, MAX_SIDE))  # decode JPEGs at reduced size directly
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            img.load()
+    except ImageTooLarge:
+        raise
+    except (Image.DecompressionBombError, Image.DecompressionBombWarning) as e:
+        raise ImageTooLarge("image has too many pixels") from e
+    except (UnidentifiedImageError, OSError, SyntaxError) as e:
         raise UnsupportedImage(str(e)) from e
     img = ImageOps.exif_transpose(img)
     img = img.convert("RGB")

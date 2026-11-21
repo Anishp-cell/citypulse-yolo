@@ -160,3 +160,46 @@ def test_users_and_roles(app, make_user, officer, admin):
     assert a.patch(f"/api/admin/users/{target['id']}/role", json={"role": "officer"}).json()["role"] == "officer"
     assert a.patch(f"/api/admin/users/{target['id']}/role", json={"role": "king"}).status_code == 422
     assert a.patch(f"/api/admin/users/{admin_user['id']}/role", json={"role": "citizen"}).status_code == 409
+
+
+def test_reject_for_abuse_removes_public_photos(app, citizen, admin):
+    # Review I6: abusive photos must disappear from public storage, not just from listings.
+    c, _ = citizen
+    a, _ = admin
+    detect_pothole(app)
+    hid = report(c)["hazard_id"]
+    with app.state.SessionLocal() as db:
+        rep = db.query(Report).filter_by(hazard_id=hid).one()
+        public_key, thumb_key = rep.public_image_key, rep.thumb_key
+    assert a.post(f"/api/admin/hazards/{hid}/reject", json={"reason": "abuse"}).status_code == 200
+    assert app.state.storage.get(public_key, public=True) is None
+    assert app.state.storage.get(thumb_key, public=True) is None
+    d = a.get(f"/api/hazards/{hid}").json()
+    assert d["photo_url"] is None and d["photos"] == [] and d["thumb_url"] is None
+
+
+def test_remove_photos_keeps_hazard_public(app, citizen, officer):
+    c, _ = citizen
+    o, _ = officer
+    detect_pothole(app)
+    hid = report(c)["hazard_id"]
+    assert o.post(f"/api/admin/hazards/{hid}/remove-photos").status_code == 200
+    d = c.get(f"/api/hazards/{hid}").json()
+    assert d["status"] == "open" and d["photo_url"] is None
+
+
+def test_long_address_truncated(app, citizen):
+    # Review I8: Hazard.address is String(300); Nominatim display names can be longer.
+    import httpx
+
+    from backend.services.geocode import Geocoder
+    from tests.conftest import FAKE_PLACE
+
+    long_place = {**FAKE_PLACE, "display_name": "A" * 450}
+    app.state.geocoder = Geocoder(app.state.settings, min_interval_s=0,
+                                  transport=httpx.MockTransport(lambda r: httpx.Response(200, json=long_place)))
+    c, _ = citizen
+    detect_pothole(app)
+    hid = report(c)["hazard_id"]
+    with app.state.SessionLocal() as db:
+        assert len(db.get(Hazard, hid).address) <= 300

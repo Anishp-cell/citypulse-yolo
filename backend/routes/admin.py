@@ -1,5 +1,6 @@
 """Officer/admin console: work queue, status updates, moderation, stats, user roles."""
 
+import logging
 from collections import Counter
 from datetime import UTC, date, datetime, timedelta
 from typing import Literal
@@ -18,6 +19,7 @@ from backend.routes.actions import store_photo
 from backend.services.notify import notify_event
 from backend.services.present import summary
 
+log = logging.getLogger("citypulse.admin")
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 REJECT_REASONS = ("duplicate", "not_a_hazard", "abuse")
@@ -109,14 +111,43 @@ def approve(hazard_id: int, request: Request, background: BackgroundTasks,
     return {"status": h.status.value}
 
 
+def remove_public_photos(db: Session, storage, h: Hazard) -> int:
+    """Delete every public crop/thumbnail of a hazard (full photos stay private for the record)."""
+    removed = 0
+    for r in db.query(Report).filter_by(hazard_id=h.id).all():
+        for key in (r.public_image_key, r.thumb_key):
+            if key:
+                try:
+                    storage.delete(key)
+                except Exception:
+                    log.exception("could not delete %s", key)
+                removed += 1
+        r.public_image_key = r.thumb_key = ""
+    h.cover_image_key = None
+    h.updated_at = datetime.now(UTC)
+    return removed
+
+
+@router.post("/hazards/{hazard_id}/remove-photos")
+def remove_photos(hazard_id: int, request: Request, _: User = Depends(require_staff), db: Session = Depends(get_db)):
+    h = _get(db, hazard_id)
+    removed = remove_public_photos(db, request.app.state.storage, h)
+    _resolve_flags(db, h.id)
+    db.commit()
+    return {"removed": removed}
+
+
 class RejectIn(BaseModel):
     reason: Literal[REJECT_REASONS]  # type: ignore[valid-type]
 
 
 @router.post("/hazards/{hazard_id}/reject")
-def reject(hazard_id: int, body: RejectIn, user: User = Depends(require_staff), db: Session = Depends(get_db)):
+def reject(hazard_id: int, body: RejectIn, request: Request, user: User = Depends(require_staff),
+           db: Session = Depends(get_db)):
     h = _get(db, hazard_id)
     _transition(db, h, HazardStatus.rejected, user, note=f"Rejected: {body.reason}")
+    if body.reason == "abuse":
+        remove_public_photos(db, request.app.state.storage, h)
     _resolve_flags(db, h.id)
     db.commit()
     return {"status": h.status.value}

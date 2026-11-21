@@ -50,7 +50,7 @@ def detail(db, h: Hazard, user: User | None, storage, app_url: str) -> dict:
     out.update({
         "address": h.address,
         "photo_url": storage.url(h.cover_image_key, public=True) if h.cover_image_key else None,
-        "photos": [storage.url(r.public_image_key, public=True) for r in h.reports][:12],
+        "photos": [storage.url(r.public_image_key, public=True) for r in h.reports if r.public_image_key][:12],
         "timeline": timeline(h),
         "official_ticket_id": h.official_ticket_id,
         "official_portal": h.official_portal,

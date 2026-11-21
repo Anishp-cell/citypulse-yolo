@@ -120,7 +120,7 @@ def verify(hazard_id: int, request: Request, background: BackgroundTasks,
     fixed_votes, not_fixed_votes = _tally(db, h)
     if fixed_votes >= 2 or (h.fixed_by_officer and fixed_votes >= 1):
         events.append(apply_transition(db, h, HazardStatus.fixed, role="system", note="Confirmed fixed by citizens"))
-    elif not_fixed_votes >= 2:
+    elif not_fixed_votes >= 2 or (h.fixed_by_officer and not_fixed_votes >= 1):
         events.append(apply_transition(db, h, HazardStatus.open, role="system",
                                        note="Citizens say it is still there; reopened"))
     h.priority_score = hazard_priority(h, datetime.now(UTC))
@@ -141,7 +141,7 @@ def flag(hazard_id: int, body: FlagIn, user: User = Depends(current_user), db: S
     h = get_visible_hazard(db, hazard_id, user)
     if db.query(Flag).filter_by(hazard_id=h.id, user_id=user.id).first():
         raise HTTPException(status_code=409, detail="already_flagged")
-    reason = body.reason if not body.details else f"{body.reason}: {body.details}"
+    reason = (body.reason if not body.details else f"{body.reason}: {body.details}")[:300]
     db.add(Flag(hazard_id=h.id, user_id=user.id, reason=reason))
     db.commit()
     return {"flagged": True}

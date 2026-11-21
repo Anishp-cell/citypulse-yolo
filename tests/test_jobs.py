@@ -146,3 +146,21 @@ def test_recomputes_priority_with_age(app, citizen):
     run(app)
     with app.state.SessionLocal() as db:
         assert db.get(Hazard, hid).priority_score > before
+
+
+def test_disputed_fix_reopens_after_14_days(app, make_user, sender):
+    # Review I5: one "fixed" and one "not fixed" vote must not leave a hazard in limbo forever.
+    a, a_user = make_user()
+    b, b_user = make_user()
+    detect_pothole(app)
+    hid = report(a)["hazard_id"]
+    age(app, hid, 15, status=HazardStatus.fixed_unverified, event_to=HazardStatus.fixed_unverified)
+    with app.state.SessionLocal() as db:
+        h = db.get(Hazard, hid)
+        h.verify_round = 1
+        db.add(Verification(hazard_id=hid, user_id=a_user["id"], round=1, is_fixed=True))
+        db.add(Verification(hazard_id=hid, user_id=b_user["id"], round=1, is_fixed=False))
+        db.commit()
+    assert run(app)["reopened_disputed"] == 1
+    with app.state.SessionLocal() as db:
+        assert db.get(Hazard, hid).status == HazardStatus.open

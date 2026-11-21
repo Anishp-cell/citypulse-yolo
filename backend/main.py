@@ -9,7 +9,6 @@ import uuid
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import text
 
 from backend import observability
 from backend.db import Base, can_connect, make_engine, make_sessionmaker
@@ -27,6 +26,7 @@ access_log = logging.getLogger("citypulse.access")
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 CSRF_HEADER = "x-requested-with"
 CSRF_VALUE = "citypulse"
+HEALTH_DB_TTL_S = 300
 CSRF_EXEMPT_PREFIXES = ("/api/internal/",)  # machine-to-machine, authenticated by token header
 
 
@@ -104,15 +104,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(internal.router)
     app.include_router(media.router)
 
+    probe = {"ok": True, "at": float("-inf")}
+
     @app.get("/health")
     def health():
-        db_ok = True
-        try:
-            with app.state.engine.connect() as conn:
-                conn.execute(text("SELECT 1"))
-        except Exception:
-            log.exception("health: database check failed")
-            db_ok = False
+        # Platforms poll this every few seconds. Re-check the database at most every 5 minutes so the
+        # health check alone never keeps a scale-to-zero database (Neon) awake.
+        now = time.monotonic()
+        if now - probe["at"] >= HEALTH_DB_TTL_S:
+            probe["ok"], probe["at"] = can_connect(app.state.engine), now
+            if not probe["ok"]:
+                log.error("health: database check failed")
+        db_ok = probe["ok"]
         model_ok = app.state.detector is not None
         body = {"status": "ok" if db_ok and model_ok else "error",
                 "db": "ok" if db_ok else "error",

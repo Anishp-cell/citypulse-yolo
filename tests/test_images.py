@@ -90,3 +90,17 @@ def test_thumb_max_side():
     full = process_upload(jpeg_bytes(size=(1000, 800))).full_jpeg
     t = open_(make_thumb(full, 256))
     assert max(t.size) == 256
+
+
+def test_decompression_bomb_rejected_before_decoding():
+    # Review C2: a ~10 KB palette PNG that decodes to 78 megapixels must not be loaded at all.
+    buf = io.BytesIO()
+    Image.new("P", (7800, 10000)).save(buf, "PNG", optimize=True)
+    assert len(buf.getvalue()) < 200_000
+    with pytest.raises(ImageTooLarge):
+        process_upload(buf.getvalue())
+
+
+def test_large_but_reasonable_photo_still_accepted():
+    p = process_upload(jpeg_bytes(size=(4000, 3000)))  # 12 MP phone photo
+    assert max(p.width, p.height) == MAX_SIDE

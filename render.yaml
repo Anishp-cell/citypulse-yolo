@@ -37,7 +37,7 @@ services:
         sync: false
       - key: VAPID_SUBJECT
         sync: false
-      - key: SMTP_HOST
+      - key: SMTP_HOST        # required in production (password-reset email)
         sync: false
       - key: SMTP_PORT
         value: "587"

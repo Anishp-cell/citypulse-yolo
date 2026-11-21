@@ -22,4 +22,4 @@ COPY --from=web /web/dist app/dist
 USER citypulse
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s CMD python -c "import urllib.request,os;urllib.request.urlopen(f'http://127.0.0.1:{os.environ[\"PORT\"]}/health',timeout=4)"
-CMD ["sh", "-c", "alembic upgrade head && exec uvicorn backend.main:create_app --factory --host 0.0.0.0 --port ${PORT} --proxy-headers --forwarded-allow-ips='*' --workers 1"]
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn backend.main:create_app --factory --host 0.0.0.0 --port ${PORT} --workers 1"]

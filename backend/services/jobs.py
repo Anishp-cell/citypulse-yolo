@@ -34,7 +34,7 @@ def _mark_reminded(db: Session, h: Hazard, kind: str, now: datetime) -> None:
 
 def run_daily(db: Session, push, storage, now: datetime) -> dict:
     report = {"priorities_updated": 0, "reminders_file": 0, "reminders_escalate": 0, "auto_confirmed": 0,
-              "uploads_purged": 0}
+              "reopened_disputed": 0, "uploads_purged": 0}
 
     for h in db.query(Hazard).filter(Hazard.status.in_(list(ACTIVE_STATUSES))).all():
         h.priority_score = hazard_priority(h, now)
@@ -59,7 +59,11 @@ def run_daily(db: Session, push, storage, now: datetime) -> dict:
     for h in db.query(Hazard).filter(Hazard.status == HazardStatus.fixed_unverified).all():
         since = _entered_at(h, HazardStatus.fixed_unverified)
         disputed = db.query(Verification).filter_by(hazard_id=h.id, round=h.verify_round, is_fixed=False).count()
-        if since and now - since >= AUTO_CONFIRM_AFTER and disputed == 0:
+        if since and now - since >= AUTO_CONFIRM_AFTER and disputed > 0:
+            apply_transition(db, h, HazardStatus.open, role="system",
+                             note="Reopened: the fix was disputed and never confirmed")
+            report["reopened_disputed"] += 1
+        elif since and now - since >= AUTO_CONFIRM_AFTER and disputed == 0:
             apply_transition(db, h, HazardStatus.fixed, role="system",
                              note="Confirmed automatically: nobody disputed the fix for 14 days")
             followers = {uid for (uid,) in db.query(Follow.user_id).filter(Follow.hazard_id == h.id)}
