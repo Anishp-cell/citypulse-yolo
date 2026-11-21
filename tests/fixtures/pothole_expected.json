@@ -1,0 +1,15 @@
+{
+  "imgsz": 640,
+  "detections": [
+    {
+      "label": "pothole",
+      "confidence": 0.8735,
+      "box": [
+        19,
+        43,
+        170,
+        132
+      ]
+    }
+  ]
+}
