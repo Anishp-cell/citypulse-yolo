@@ -71,8 +71,11 @@ function LocationStep({ gps, gpsError, onConfirm, busy }) {
   const { t } = useTranslation();
   const precise = gps && gps.accuracy <= GOOD_ACCURACY_M;
   const start = gps || DEFAULT_CENTER;
-  const [pin, setPin] = useState(start);
+  // The pin is wherever the user dragged the map to; until they do, it is the GPS fix (which may
+  // arrive after this component first renders, so it must not be frozen into initial state).
+  const [dragged, setDragged] = useState(null);
   const [moved, setMoved] = useState(false);
+  const pin = moved && dragged ? dragged : start;
   const pinRequired = !precise;
   const ready = !pinRequired || moved;
   const locating = !gps && !gpsError;
@@ -87,7 +90,7 @@ function LocationStep({ gps, gpsError, onConfirm, busy }) {
       {!locating && (
         <div className="pin-map" data-testid="pin-map">
           <MapView center={start} zoom={gps ? 18 : 13} cluster={false}>
-            <PinTracker onPin={(c) => setPin({ lat: c.lat, lng: c.lng })} onMoved={() => setMoved(true)} />
+            <PinTracker onPin={(c) => setDragged({ lat: c.lat, lng: c.lng })} onMoved={() => setMoved(true)} />
           </MapView>
           <div className="pin-center" aria-hidden="true"><MapPin size={40} fill="currentColor" stroke="#fff" /></div>
         </div>

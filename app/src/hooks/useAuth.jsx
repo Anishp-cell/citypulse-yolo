@@ -24,6 +24,7 @@ export function AuthProvider({ children }) {
   const setUser = useCallback((user) => {
     qc.setQueryData(['auth', 'me'], user);
     if (user?.language) setLanguage(user.language);
+    return user;
   }, [qc]);
 
   const value = useMemo(() => ({

@@ -34,3 +34,4 @@ app/playwright-report/
 .claude/
 skills-lock.json
 .superpowers/
+app/.e2e-runs/
