@@ -65,10 +65,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return JSONResponse({"detail": "csrf_header_missing"}, status_code=403)
         return await call_next(request)
 
-    from backend.routes import auth, media, reports
+    from backend.routes import auth, hazards, media, reports, spa
 
     app.include_router(auth.router)
     app.include_router(reports.router)
+    app.include_router(hazards.router)
     app.include_router(media.router)
 
     @app.get("/health")
@@ -86,4 +87,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "model": "ok" if model_ok else "error"}
         return JSONResponse(body, status_code=200 if db_ok and model_ok else 503)
 
+    app.include_router(spa.router)  # last: catch-all for the PWA
     return app

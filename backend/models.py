@@ -186,3 +186,10 @@ class GeocodeCache(Base):
     key: Mapped[str] = mapped_column(String(40), primary_key=True)
     payload: Mapped[dict] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+def aware(dt: datetime | None) -> datetime | None:
+    """SQLite drops tzinfo; every stored timestamp is UTC."""
+    if dt is not None and dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt

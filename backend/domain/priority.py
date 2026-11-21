@@ -19,9 +19,7 @@ def compute_priority(hazard_type: str, severity: str, report_count: int, first_r
 
 
 def hazard_priority(hazard, now: datetime) -> float:
-    first = hazard.first_reported_at
-    if first.tzinfo is None:  # SQLite returns naive datetimes
-        from datetime import timezone
+    from backend.models import aware
 
-        first = first.replace(tzinfo=timezone.utc)
+    first = aware(hazard.first_reported_at)
     return compute_priority(hazard.type, hazard.severity, hazard.report_count, first, now, hazard.dispute_count)
