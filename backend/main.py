@@ -14,6 +14,7 @@ from backend.ml.detector import FakeDetector
 from backend.ratelimit import RateLimiter
 from backend.services.geocode import Geocoder
 from backend.services.mailer import build_mailer
+from backend.services.push import PushService
 from backend.services.storage import build_storage
 from backend.settings import Settings
 
@@ -47,6 +48,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.rate_limiter = RateLimiter()
     app.state.storage = build_storage(settings)
     app.state.geocoder = Geocoder(settings)
+    app.state.push = PushService(settings, app.state.SessionLocal)
 
     if not settings.is_production:
         # Production schema is managed by Alembic (`alembic upgrade head` runs before the server starts).
@@ -65,7 +67,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return JSONResponse({"detail": "csrf_header_missing"}, status_code=403)
         return await call_next(request)
 
-    from backend.routes import actions, admin, auth, hazards, me, media, reports, spa
+    from backend.routes import actions, admin, auth, hazards, me, media, push, reports, spa
 
     app.include_router(auth.router)
     app.include_router(reports.router)
@@ -73,6 +75,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(actions.router)
     app.include_router(me.router)
     app.include_router(admin.router)
+    app.include_router(push.router)
     app.include_router(media.router)
 
     @app.get("/health")
