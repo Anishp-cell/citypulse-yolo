@@ -1,166 +1,188 @@
-from sqlalchemy import Column, Integer, String, DateTime, Float, ForeignKey, Enum, JSON, Boolean, Text
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
-import enum
-from backend.database import Base
+"""Database schema. Roads and wards are derived from hazards, not stored separately."""
 
-class UserRole(str, enum.Enum):
-    citizen = "citizen"
-    officer = "officer"
-    admin = "admin"
-    moderator = "moderator"
+import uuid
+from datetime import datetime, timezone
 
-class IncidentStatus(str, enum.Enum):
-    detected = "detected"
-    submitted = "submitted"
-    validating = "validating"
-    routed = "routed"
-    acknowledged = "acknowledged"
-    in_progress = "in_progress"
-    reported_fixed = "reported_fixed"
-    citizen_verification = "citizen_verification"
-    resolved = "resolved"
-    confirmed_fixed = "confirmed_fixed"
-    disputed = "disputed"
-    closed = "closed"
+from sqlalchemy import (JSON, Boolean, DateTime, Enum, Float, ForeignKey, Index, Integer, String, Text,
+                        UniqueConstraint)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-class HazardSeverity(str, enum.Enum):
-    minor = "minor"
-    moderate = "moderate"
-    severe = "severe"
-    critical = "critical"
+from backend.db import Base
+from backend.domain.status import HazardStatus
+
+HAZARD_TYPES = ("pothole", "open_manhole", "waterlogging", "debris", "other")
+SEVERITIES = ("low", "medium", "high")
+ROLES = ("citizen", "officer", "admin")
+
+
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _enum(*values, name):
+    return Enum(*values, name=name, native_enum=False, validate_strings=True)
+
+
+_status_enum = Enum(HazardStatus, name="hazard_status", native_enum=False, validate_strings=True,
+                    values_callable=lambda e: [m.value for m in e])
+
 
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, index=True, nullable=False)
-    hashed_password = Column(String, nullable=False)
-    phone = Column(String, unique=True, index=True, nullable=True)
-    full_name = Column(String, nullable=True)
-    role = Column(Enum(UserRole), default=UserRole.citizen, nullable=False)
-    district = Column(String, nullable=True)
-    home_ward = Column(String, nullable=True)
-    trust_score = Column(Float, default=0.50, nullable=False)
-    points_balance = Column(Integer, default=0, nullable=False)
-    fcm_push_token = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    hashed_password: Mapped[str] = mapped_column(String(200))
+    full_name: Mapped[str | None] = mapped_column(String(120))
+    role: Mapped[str] = mapped_column(_enum(*ROLES, name="user_role"), default="citizen")
+    city: Mapped[str | None] = mapped_column(String(80))
+    ward: Mapped[str | None] = mapped_column(String(120))
+    language: Mapped[str] = mapped_column(String(5), default="en")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
-    incidents = relationship("Incident", back_populates="reporter")
-    verifications = relationship("Verification", back_populates="verifier")
-    point_transactions = relationship("PointTransaction", back_populates="user")
-    road_subscriptions = relationship("RoadSubscription", back_populates="user")
 
-class RoadSegment(Base):
-    __tablename__ = "road_segments"
+class Hazard(Base):
+    __tablename__ = "hazards"
+    __table_args__ = (
+        Index("ix_hazards_lat_lng", "lat", "lng"),
+        Index("ix_hazards_city_status", "city", "status"),
+    )
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True, nullable=False)
-    ward = Column(String, index=True, nullable=False)
-    city = Column(String, index=True, default="Pune", nullable=False)
-    length_km = Column(Float, default=1.0, nullable=False)
-    health_score = Column(Float, default=100.0, index=True, nullable=False) # 0 to 100
-    active_potholes_count = Column(Integer, default=0, nullable=False)
-    resolved_potholes_count = Column(Integer, default=0, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    id: Mapped[int] = mapped_column(primary_key=True)
+    type: Mapped[str] = mapped_column(_enum(*HAZARD_TYPES, name="hazard_type"))
+    severity: Mapped[str] = mapped_column(_enum(*SEVERITIES, name="hazard_severity"), default="medium")
+    status: Mapped[HazardStatus] = mapped_column(_status_enum, default=HazardStatus.open)
+    lat: Mapped[float] = mapped_column(Float)
+    lng: Mapped[float] = mapped_column(Float)
+    address: Mapped[str | None] = mapped_column(String(300))
+    road: Mapped[str | None] = mapped_column(String(200), index=True)
+    ward: Mapped[str | None] = mapped_column(String(120), index=True)
+    city: Mapped[str | None] = mapped_column(String(80))
+    priority_score: Mapped[float] = mapped_column(Float, default=0.0, index=True)
+    report_count: Mapped[int] = mapped_column(Integer, default=1)
+    ai_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    cover_image_key: Mapped[str | None] = mapped_column(String(200))
+    official_ticket_id: Mapped[str | None] = mapped_column(String(80))
+    official_portal: Mapped[str | None] = mapped_column(String(120))
+    verify_round: Mapped[int] = mapped_column(Integer, default=0)
+    fixed_by_officer: Mapped[bool] = mapped_column(Boolean, default=False)
+    dispute_count: Mapped[int] = mapped_column(Integer, default=0)
+    first_reported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_reported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    fixed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
-    clusters = relationship("PotholeCluster", back_populates="road")
-    subscriptions = relationship("RoadSubscription", back_populates="road")
+    reports: Mapped[list["Report"]] = relationship(back_populates="hazard", order_by="Report.id")
+    events: Mapped[list["StatusEvent"]] = relationship(back_populates="hazard", order_by="StatusEvent.id")
 
-class PotholeCluster(Base):
-    __tablename__ = "pothole_clusters"
 
-    id = Column(Integer, primary_key=True, index=True)
-    road_id = Column(Integer, ForeignKey("road_segments.id"), nullable=True)
-    lat = Column(Float, index=True, nullable=False)
-    lng = Column(Float, index=True, nullable=False)
-    address_text = Column(String, nullable=True)
-    severity = Column(String, default="moderate", nullable=False)
-    priority_score = Column(Float, default=0.0, index=True, nullable=False)
-    status = Column(Enum(IncidentStatus), default=IncidentStatus.submitted, nullable=False)
-    report_count = Column(Integer, default=1, nullable=False)
-    first_reported_at = Column(DateTime(timezone=True), server_default=func.now())
-    last_reported_at = Column(DateTime(timezone=True), server_default=func.now())
-    last_followup_sent_at = Column(DateTime(timezone=True), nullable=True)
-    government_ticket_id = Column(String, nullable=True)
-    government_dept = Column(String, nullable=True)
+class Report(Base):
+    __tablename__ = "reports"
+    __table_args__ = (UniqueConstraint("user_id", "idempotency_key", name="uq_reports_user_idem"),)
 
-    road = relationship("RoadSegment", back_populates="clusters")
-    incidents = relationship("Incident", back_populates="cluster")
-    verifications = relationship("Verification", back_populates="cluster")
+    id: Mapped[int] = mapped_column(primary_key=True)
+    hazard_id: Mapped[int] = mapped_column(ForeignKey("hazards.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    image_key: Mapped[str] = mapped_column(String(200))
+    public_image_key: Mapped[str] = mapped_column(String(200))
+    thumb_key: Mapped[str] = mapped_column(String(200))
+    ai_label: Mapped[str | None] = mapped_column(String(40))
+    ai_confidence: Mapped[float | None] = mapped_column(Float)
+    ai_boxes: Mapped[list | None] = mapped_column(JSON)
+    location_source: Mapped[str] = mapped_column(_enum("gps", "manual", name="location_source"), default="gps")
+    gps_accuracy_m: Mapped[float | None] = mapped_column(Float)
+    lat: Mapped[float] = mapped_column(Float)
+    lng: Mapped[float] = mapped_column(Float)
+    note: Mapped[str | None] = mapped_column(String(500))
+    idempotency_key: Mapped[str | None] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
-class Incident(Base):
-    __tablename__ = "incidents"
+    hazard: Mapped[Hazard] = relationship(back_populates="reports")
 
-    id = Column(Integer, primary_key=True, index=True)
-    cluster_id = Column(Integer, ForeignKey("pothole_clusters.id"), nullable=True)
-    image_url = Column(String, nullable=True)
-    video_url = Column(String, nullable=True)
-    severity = Column(String, index=True, nullable=False)
-    
-    lat = Column(Float, nullable=True)
-    lng = Column(Float, nullable=True)
-    speed_kmh = Column(Float, default=0.0, nullable=True)
-    
-    address_text = Column(String, nullable=True)
-    detection_results = Column(JSON, nullable=True)
-    guidance = Column(JSON, nullable=True)
-    
-    status = Column(Enum(IncidentStatus), default=IncidentStatus.detected, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
-    reported_by = Column(Integer, ForeignKey("users.id"), nullable=True)
-    reporter = relationship("User", back_populates="incidents")
-    cluster = relationship("PotholeCluster", back_populates="incidents")
-    
-    notifications = relationship("Notification", back_populates="incident")
+
+class Upload(Base):
+    """A photo that has been analysed but not yet turned into a report (purged after 24h)."""
+
+    __tablename__ = "uploads"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    image_key: Mapped[str] = mapped_column(String(200))
+    public_image_key: Mapped[str] = mapped_column(String(200))
+    thumb_key: Mapped[str] = mapped_column(String(200))
+    ai: Mapped[dict] = mapped_column(JSON)
+    lat: Mapped[float] = mapped_column(Float)
+    lng: Mapped[float] = mapped_column(Float)
+    accuracy_m: Mapped[float | None] = mapped_column(Float)
+    location_source: Mapped[str] = mapped_column(String(10), default="gps")
+    place: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class StatusEvent(Base):
+    __tablename__ = "status_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    hazard_id: Mapped[int] = mapped_column(ForeignKey("hazards.id", ondelete="CASCADE"), index=True)
+    from_status: Mapped[HazardStatus | None] = mapped_column(_status_enum)
+    to_status: Mapped[HazardStatus] = mapped_column(_status_enum)
+    actor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    note: Mapped[str | None] = mapped_column(String(500))
+    image_key: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    hazard: Mapped[Hazard] = relationship(back_populates="events")
+
 
 class Verification(Base):
     __tablename__ = "verifications"
+    __table_args__ = (UniqueConstraint("hazard_id", "user_id", "round", name="uq_verification_round"),)
 
-    id = Column(Integer, primary_key=True, index=True)
-    cluster_id = Column(Integer, ForeignKey("pothole_clusters.id"), nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    image_url = Column(String, nullable=True)
-    is_fixed = Column(Boolean, nullable=False)
-    notes = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    id: Mapped[int] = mapped_column(primary_key=True)
+    hazard_id: Mapped[int] = mapped_column(ForeignKey("hazards.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    round: Mapped[int] = mapped_column(Integer)
+    is_fixed: Mapped[bool] = mapped_column(Boolean)
+    image_key: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
-    cluster = relationship("PotholeCluster", back_populates="verifications")
-    verifier = relationship("User", back_populates="verifications")
 
-class RoadSubscription(Base):
-    __tablename__ = "road_subscriptions"
+class Follow(Base):
+    __tablename__ = "follows"
 
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    road_id = Column(Integer, ForeignKey("road_segments.id"), nullable=False)
-    notify_on_repairs = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    hazard_id: Mapped[int] = mapped_column(ForeignKey("hazards.id", ondelete="CASCADE"), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
-    user = relationship("User", back_populates="road_subscriptions")
-    road = relationship("RoadSegment", back_populates="subscriptions")
 
-class PointTransaction(Base):
-    __tablename__ = "point_transactions"
+class Flag(Base):
+    __tablename__ = "flags"
 
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    amount = Column(Integer, nullable=False) # e.g. +10, +25, +50
-    reason = Column(String, nullable=False) # 'SUBMISSION', 'GOV_ACK', 'VERIFICATION_FIX'
-    reference_id = Column(Integer, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    id: Mapped[int] = mapped_column(primary_key=True)
+    hazard_id: Mapped[int] = mapped_column(ForeignKey("hazards.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    reason: Mapped[str] = mapped_column(String(300))
+    resolved: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
-    user = relationship("User", back_populates="point_transactions")
 
-class Notification(Base):
-    __tablename__ = "notifications"
+class PushSubscription(Base):
+    __tablename__ = "push_subscriptions"
 
-    id = Column(Integer, primary_key=True, index=True)
-    incident_id = Column(Integer, ForeignKey("incidents.id"), nullable=False)
-    channel = Column(String, nullable=False) # 'sms', 'email', 'push'
-    recipient = Column(String, nullable=False)
-    status = Column(String, nullable=False) # 'sent', 'failed'
-    sent_at = Column(DateTime(timezone=True), server_default=func.now())
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    endpoint: Mapped[str] = mapped_column(Text, unique=True)
+    p256dh: Mapped[str] = mapped_column(String(200))
+    auth: Mapped[str] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
-    incident = relationship("Incident", back_populates="notifications")
+
+class GeocodeCache(Base):
+    __tablename__ = "geocode_cache"
+
+    key: Mapped[str] = mapped_column(String(40), primary_key=True)
+    payload: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
