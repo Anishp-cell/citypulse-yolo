@@ -1,65 +1,64 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './hooks/useAuth';
-import AdminLayout from './components/Layout/AdminLayout';
-import PublicLayout from './components/Layout/PublicLayout';
-import Login from './pages/auth/Login';
-import Register from './pages/auth/Register';
-import Dashboard from './pages/admin/Dashboard';
-import IncidentMap from './pages/admin/IncidentMap';
-import Incidents from './pages/admin/Incidents';
-import Analytics from './pages/admin/Analytics';
-import Home from './pages/public/Home';
-import Report from './pages/public/Report';
-import MyReports from './pages/public/MyReports';
-import Safety from './pages/public/Safety';
-import './i18n';
+import { Component, lazy, Suspense } from 'react';
+import { Route, Routes } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { PublicLayout } from './components/Layouts';
+import { Loading } from './components/ui';
+import Home from './pages/Home';
+import Hazard from './pages/Hazard';
+import MyReports from './pages/MyReports';
+import City from './pages/City';
+import Emergency from './pages/Emergency';
+import Settings from './pages/Settings';
+import NotFound from './pages/NotFound';
+import { Privacy, Terms } from './pages/Legal';
+import { ForgotPassword, Login, Register, ResetPassword } from './pages/auth/AuthPages';
 
-function RequireAuth({ children, roles }) {
-  const { user, loading } = useAuth();
-  if (loading) return <div className="page-loading"><span className="spinner" style={{width:32,height:32}} /></div>;
-  if (!user) return <Navigate to="/login" replace />;
-  if (roles && !roles.includes(user.role)) return <Navigate to="/" replace />;
-  return children;
+const AdminApp = lazy(() => import('./pages/admin/AdminApp'));
+const MapPage = lazy(() => import('./pages/MapPage'));
+const ReportFlow = lazy(() => import('./pages/report/ReportFlow'));
+
+function Crash() {
+  const { t } = useTranslation();
+  return (
+    <div className="page"><div className="card stack center">
+      <h1>{t('common.error_title')}</h1>
+      <button className="btn btn-primary" onClick={() => window.location.reload()}>{t('common.retry')}</button>
+    </div></div>
+  );
 }
 
-function AppRoutes() {
-  const { user, loading } = useAuth();
-  if (loading) return <div className="page-loading" style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center'}}><span className="spinner" style={{width:32,height:32}} /></div>;
-
-  return (
-    <Routes>
-      {/* Auth */}
-      <Route path="/login" element={user ? <Navigate to={user.role === 'citizen' ? '/' : '/admin'} replace /> : <Login />} />
-      <Route path="/register" element={user ? <Navigate to="/" replace /> : <Register />} />
-
-      {/* Admin Routes */}
-      <Route path="/admin" element={<RequireAuth roles={['admin','officer']}><AdminLayout /></RequireAuth>}>
-        <Route index element={<Dashboard />} />
-        <Route path="map" element={<IncidentMap />} />
-        <Route path="incidents" element={<Incidents />} />
-        <Route path="analytics" element={<Analytics />} />
-      </Route>
-
-      {/* Public Routes */}
-      <Route element={<PublicLayout />}>
-        <Route path="/" element={<Home />} />
-        <Route path="/report" element={<RequireAuth><Report /></RequireAuth>} />
-        <Route path="/my-reports" element={<RequireAuth><MyReports /></RequireAuth>} />
-        <Route path="/safety" element={<Safety />} />
-      </Route>
-
-      {/* Fallback */}
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
-  );
+class ErrorBoundary extends Component {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch(error, info) { console.error(error, info); }
+  render() { return this.state.failed ? <Crash /> : this.props.children; }
 }
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <Suspense fallback={<Loading />}>
+        <Routes>
+          <Route path="/admin/*" element={<AdminApp />} />
+          <Route element={<PublicLayout />}>
+            <Route index element={<Home />} />
+            <Route path="map" element={<MapPage />} />
+            <Route path="report" element={<ReportFlow />} />
+            <Route path="h/:id" element={<Hazard />} />
+            <Route path="me" element={<MyReports />} />
+            <Route path="city" element={<City />} />
+            <Route path="emergency" element={<Emergency />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="privacy" element={<Privacy />} />
+            <Route path="terms" element={<Terms />} />
+            <Route path="login" element={<Login />} />
+            <Route path="register" element={<Register />} />
+            <Route path="forgot-password" element={<ForgotPassword />} />
+            <Route path="reset-password" element={<ResetPassword />} />
+            <Route path="*" element={<NotFound />} />
+          </Route>
+        </Routes>
+      </Suspense>
+    </ErrorBoundary>
   );
 }
