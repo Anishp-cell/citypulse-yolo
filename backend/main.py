@@ -12,7 +12,9 @@ from sqlalchemy import text
 from backend.db import Base, make_engine, make_sessionmaker
 from backend.ml.detector import FakeDetector
 from backend.ratelimit import RateLimiter
+from backend.services.geocode import Geocoder
 from backend.services.mailer import build_mailer
+from backend.services.storage import build_storage
 from backend.settings import Settings
 
 log = logging.getLogger("citypulse")
@@ -43,6 +45,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.detector = _build_detector(settings)
     app.state.mailer = build_mailer(settings)
     app.state.rate_limiter = RateLimiter()
+    app.state.storage = build_storage(settings)
+    app.state.geocoder = Geocoder(settings)
 
     if not settings.is_production:
         # Production schema is managed by Alembic (`alembic upgrade head` runs before the server starts).
@@ -61,9 +65,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return JSONResponse({"detail": "csrf_header_missing"}, status_code=403)
         return await call_next(request)
 
-    from backend.routes import auth
+    from backend.routes import auth, media
 
     app.include_router(auth.router)
+    app.include_router(media.router)
 
     @app.get("/health")
     def health():

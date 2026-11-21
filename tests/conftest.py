@@ -1,5 +1,6 @@
 import itertools
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -24,9 +25,21 @@ def settings(tmp_path):
     )
 
 
+FAKE_PLACE = {
+    "display_name": "FC Road, Shivajinagar, Pune, Maharashtra, India",
+    "address": {"road": "FC Road", "suburb": "Shivajinagar", "city": "Pune"},
+}
+
+
 @pytest.fixture
 def app(settings):
-    return create_app(settings)
+    from backend.services.geocode import Geocoder
+
+    app = create_app(settings)
+    # Never call the real geocoding service from tests.
+    app.state.geocoder = Geocoder(settings, transport=httpx.MockTransport(lambda r: httpx.Response(200, json=FAKE_PLACE)),
+                                  min_interval_s=0)
+    return app
 
 
 def _new_client(app):
