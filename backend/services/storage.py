@@ -20,6 +20,7 @@ def new_key(prefix: str, ext: str = "jpg") -> str:
 
 class Storage(Protocol):
     def put(self, key: str, data: bytes, content_type: str, public: bool) -> None: ...
+    def get(self, key: str, public: bool) -> bytes | None: ...
     def url(self, key: str, public: bool) -> str: ...
     def delete(self, key: str) -> None: ...
 
@@ -52,6 +53,8 @@ class LocalStorage:
         except ValueError:
             return None
         return path.read_bytes() if path.is_file() else None
+
+    get = read
 
     def _sig(self, key: str, exp: str) -> str:
         return hmac.new(self.secret, f"{key}:{exp}".encode(), hashlib.sha256).hexdigest()
@@ -100,6 +103,12 @@ class R2Storage:
         extra = {"CacheControl": "public, max-age=31536000, immutable"} if public else {}
         self.client.put_object(Bucket=self._bucket(public), Key=_safe_key(key), Body=data,
                                ContentType=content_type, **extra)
+
+    def get(self, key: str, public: bool) -> bytes | None:
+        try:
+            return self.client.get_object(Bucket=self._bucket(public), Key=key)["Body"].read()
+        except self.client.exceptions.NoSuchKey:
+            return None
 
     def url(self, key: str, public: bool) -> str:
         if public:

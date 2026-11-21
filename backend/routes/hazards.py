@@ -103,3 +103,26 @@ def scorecard(city: str = Query("Pune", max_length=80), db: Session = Depends(ge
 @router.get("/meta/statuses")
 def statuses():
     return [{"value": s.value, "active": s in ACTIVE_STATUSES, "public": s in PUBLIC_STATUSES} for s in HazardStatus]
+
+
+@router.get("/hazards/{hazard_id}/complaint")
+def complaint(hazard_id: int, request: Request, lang: Literal["en", "hi", "mr"] = "en",
+              user: User | None = Depends(current_user_optional), db: Session = Depends(get_db)):
+    from backend.services.complaint import build_complaint
+
+    h = get_visible_hazard(db, hazard_id, None)  # complaint packs exist only for public hazards
+    return build_complaint(h, lang, request.app.state.settings.app_url)
+
+
+@router.get("/hazards/{hazard_id}/complaint.pdf")
+def complaint_pdf(hazard_id: int, request: Request, db: Session = Depends(get_db)):
+    from fastapi.responses import Response
+
+    from backend.services.complaint_pdf import build_pdf
+
+    h = get_visible_hazard(db, hazard_id, None)
+    photo = request.app.state.storage.get(h.cover_image_key, public=True) if h.cover_image_key else None
+    pdf = build_pdf(h, request.app.state.settings.app_url, photo)
+    return Response(pdf, media_type="application/pdf", headers={
+        "Content-Disposition": f'inline; filename="CityPulse-complaint-CP-{h.id}.pdf"',
+        "Cache-Control": "public, max-age=300"})
