@@ -24,7 +24,7 @@ registerRoute(
 );
 
 registerRoute(
-  ({ url }) => url.hostname.endsWith('basemaps.cartocdn.com'),
+  ({ url }) => url.hostname === 'tile.openstreetmap.org',
   new CacheFirst({ cacheName: 'tiles', plugins: [new ExpirationPlugin({ maxEntries: 600, maxAgeSeconds: 14 * 86400 })] }),
 );
 

@@ -7,12 +7,10 @@ import 'react-leaflet-cluster/dist/assets/MarkerCluster.css';
 import 'react-leaflet-cluster/dist/assets/MarkerCluster.Default.css';
 import { statusMeta } from '../lib/status';
 
-// CARTO basemaps: free with attribution (tile.openstreetmap.org forbids heavy app usage).
-const TILES = {
-  light: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-  dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-};
-const ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+// OpenStreetMap standard tiles: fine for light use with attribution. Switch to a keyed provider
+// (MapTiler, Stadia) before heavy traffic. CARTO's free basemaps now require an API key.
+const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+const ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 const iconCache = new Map();
 function pinIcon(status) {
@@ -44,7 +42,7 @@ function Recenter({ center, zoom }) {
 const prefersDark = () => window.matchMedia?.('(prefers-color-scheme: dark)').matches;
 
 export default function MapView({ center, zoom = 15, hazards = [], onSelect, onMove, children, cluster = true }) {
-  const tiles = useMemo(() => (prefersDark() ? TILES.dark : TILES.light), []);
+  const dark = useMemo(() => prefersDark(), []);
   const markers = hazards.map((h) => (
     <Marker key={h.id} position={[h.lat, h.lng]} icon={pinIcon(h.status)}
       eventHandlers={{ click: () => onSelect?.(h) }} title={h.road || h.type} />
@@ -52,7 +50,7 @@ export default function MapView({ center, zoom = 15, hazards = [], onSelect, onM
   return (
     <MapContainer center={[center.lat, center.lng]} zoom={zoom} zoomControl={false} attributionControl
       style={{ height: '100%', width: '100%' }}>
-      <TileLayer url={tiles} attribution={ATTRIBUTION} subdomains="abcd" maxZoom={20} detectRetina />
+      <TileLayer url={TILE_URL} attribution={ATTRIBUTION} maxZoom={19} className={dark ? 'tiles-dark' : undefined} />
       <Events onMove={onMove} />
       <Recenter center={center} zoom={zoom} />
       {cluster ? <MarkerClusterGroup chunkedLoading maxClusterRadius={45}>{markers}</MarkerClusterGroup> : markers}

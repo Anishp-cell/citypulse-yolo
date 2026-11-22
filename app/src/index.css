@@ -262,3 +262,4 @@ table.table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
 /* Leaflet theme tweaks */
 .leaflet-container { font: inherit; background: var(--surface-2); }
 .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--surface); color: var(--text); }
+.tiles-dark { filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9); }
