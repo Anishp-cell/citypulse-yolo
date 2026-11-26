@@ -20,7 +20,8 @@ describe('share', () => {
   });
 
   it('prefetchPdf returns a named PDF File', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(new Blob(['%PDF'], { type: 'application/pdf' })));
+    // A plain object, not new Response(): Node's Response cannot read jsdom's Blob ("object.stream is not a function").
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: true, blob: async () => new Blob(['%PDF'], { type: 'application/pdf' }) });
     const f = await prefetchPdf('/x.pdf', 'c.pdf');
     expect(f.name).toBe('c.pdf');
     expect(f.type).toBe('application/pdf');
