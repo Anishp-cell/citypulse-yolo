@@ -24,6 +24,8 @@ jobs:
           --health-cmd "pg_isready -U citypulse" --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -52,6 +54,8 @@ jobs:
         working-directory: app
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -67,6 +71,8 @@ jobs:
     needs: [backend, frontend]
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -98,6 +104,8 @@ jobs:
     needs: [backend, frontend]
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true
       - run: docker build -t citypulse:ci .
       - name: Image starts and passes its health check
         run: |
