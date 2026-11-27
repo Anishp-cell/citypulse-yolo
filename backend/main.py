@@ -10,7 +10,7 @@ import uuid
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from backend import observability
+from backend import observability, security_headers
 from backend.db import Base, can_connect, make_engine, make_sessionmaker
 from backend.ml.detector import FakeDetector
 from backend.ratelimit import RateLimiter
@@ -91,6 +91,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 and request.headers.get(CSRF_HEADER) != CSRF_VALUE):
             return JSONResponse({"detail": "csrf_header_missing"}, status_code=403)
         return await call_next(request)
+
+    secure_headers = security_headers.build_headers(settings)
+    csp = security_headers.content_security_policy(settings)
+
+    # Registered after csrf_guard so it wraps it: its early 403 responses get the headers too.
+    @app.middleware("http")
+    async def browser_security_headers(request: Request, call_next):
+        response = await call_next(request)
+        for name, value in secure_headers.items():
+            response.headers.setdefault(name, value)
+        if not request.url.path.startswith(security_headers.CSP_EXEMPT_PREFIXES):
+            response.headers.setdefault("Content-Security-Policy", csp)
+        return response
 
     from backend.routes import actions, admin, auth, hazards, internal, me, media, push, reports, spa
 

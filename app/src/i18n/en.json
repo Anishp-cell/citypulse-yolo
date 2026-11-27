@@ -297,6 +297,7 @@
     "signed_in_as": "Signed in as {{email}}",
     "name": "Your name",
     "saved": "Saved",
+    "logout_all": "Sign out of all devices",
     "delete_account": "Delete my account",
     "delete_confirm": "Delete your account? Your reports stay on the map without your name. This can't be undone.",
     "install": "Install CityPulse",

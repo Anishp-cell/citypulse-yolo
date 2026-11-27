@@ -35,15 +35,26 @@ def _decode(token: str, secret: str) -> dict | None:
         return None
 
 
-def create_session_token(user_id: int, secret: str) -> str:
-    return _encode({"sub": str(user_id), "purpose": "session"}, secret, timedelta(days=SESSION_DAYS))
+def create_session_token(user_id: int, secret: str, version: int = 0) -> str:
+    return _encode({"sub": str(user_id), "purpose": "session", "sv": version}, secret,
+                   timedelta(days=SESSION_DAYS))
 
 
-def decode_session_token(token: str, secret: str) -> int | None:
+def decode_session(token: str, secret: str) -> tuple[int, int] | None:
+    """(user id, session version), or None. Tokens issued before versions existed count as version 0."""
     data = _decode(token, secret)
     if not data or data.get("purpose") != "session":
         return None
-    return int(data["sub"])
+    try:
+        return int(data["sub"]), int(data.get("sv", 0))
+    except (TypeError, ValueError):
+        return None
+
+
+def decode_session_token(token: str, secret: str) -> int | None:
+    """User id only, without checking the session version (used for rate-limit keys)."""
+    decoded = decode_session(token, secret)
+    return decoded[0] if decoded else None
 
 
 def _password_fingerprint(hashed_password: str) -> str:

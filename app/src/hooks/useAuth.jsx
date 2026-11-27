@@ -37,6 +37,11 @@ export function AuthProvider({ children }) {
       qc.clear();
       qc.setQueryData(['auth', 'me'], null);
     },
+    logoutAll: async () => {
+      await api.post('/api/auth/logout-all');
+      qc.clear();
+      qc.setQueryData(['auth', 'me'], null);
+    },
     updateProfile: async (patch) => setUser(await api.patch('/api/auth/me', patch)),
     deleteAccount: async () => {
       await api.del('/api/auth/me');

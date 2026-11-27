@@ -52,7 +52,7 @@ function Notifications() {
 
 export default function Settings() {
   const { t, i18n } = useTranslation();
-  const { user, logout, updateProfile, deleteAccount } = useAuth();
+  const { user, logout, logoutAll, updateProfile, deleteAccount } = useAuth();
   const navigate = useNavigate();
   const [name, setName] = useState(user?.full_name || '');
   const install = useInstallPrompt();
@@ -103,6 +103,11 @@ export default function Settings() {
             </form>
             <button className="btn btn-outline" onClick={async () => { await logout(); navigate('/'); }}>
               <LogOut size={18} />{t('nav.logout')}
+            </button>
+            <button className="btn btn-ghost" onClick={async () => {
+              try { await logoutAll(); navigate('/'); } catch (err) { toast(errorMessage(t, err)); }
+            }}>
+              <LogOut size={18} />{t('settings.logout_all')}
             </button>
             <button className="btn btn-ghost" style={{ color: 'var(--danger)' }} onClick={remove}>
               <Trash2 size={18} />{t('settings.delete_account')}

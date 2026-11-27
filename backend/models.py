@@ -38,6 +38,9 @@ class User(Base):
     ward: Mapped[str | None] = mapped_column(String(120))
     language: Mapped[str] = mapped_column(String(5), default="en")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Part of every session token; incrementing it ends all of the user's sessions (logout everywhere,
+    # password reset).
+    session_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
