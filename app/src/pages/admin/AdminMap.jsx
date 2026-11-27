@@ -1,22 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import L from 'leaflet';
-import 'leaflet.heat';
-import { useMap } from 'react-leaflet';
 import { useAdminStats, useHazards } from '../../api/hooks';
 import MapView from '../../components/MapView';
 import { boundsParam, DEFAULT_CENTER } from '../../lib/geo';
-
-function Heat({ points }) {
-  const map = useMap();
-  useEffect(() => {
-    const layer = L.heatLayer(points.map((p) => [p.lat, p.lng, Math.max(0.2, p.weight)]), { radius: 25, blur: 18 });
-    layer.addTo(map);
-    return () => { map.removeLayer(layer); };
-  }, [map, points]);
-  return null;
-}
+import { statusMeta } from '../../lib/status';
+import { Heat, PageHeader } from './parts';
+import { PIPELINE } from './consoleUtils';
 
 export default function AdminMap() {
   const { t } = useTranslation();
@@ -27,21 +17,25 @@ export default function AdminMap() {
   const hazards = useHazards(bbox, 'all');
   const stats = useAdminStats();
   return (
-    <div className="stack">
-      <div className="spread">
-        <h1>{t('admin.map')}</h1>
-        <div className="chips">
+    <>
+      <PageHeader title={t('admin.map')} description={t('admin.map_desc')}>
+        <div className="segmented" role="group" aria-label={t('admin.map')}>
           {['pins', 'heatmap'].map((m) => (
-            <button key={m} className="chip" aria-pressed={mode === m} onClick={() => setMode(m)}>{t(`admin.${m}`)}</button>
+            <button key={m} type="button" aria-pressed={mode === m} onClick={() => setMode(m)}>{t(`admin.${m}`)}</button>
           ))}
         </div>
-      </div>
-      <div className="admin-map">
+      </PageHeader>
+      <div className="panel admin-map">
         <MapView center={DEFAULT_CENTER} zoom={12} onMove={onMove}
           hazards={mode === 'pins' ? hazards.data?.hazards || [] : []} onSelect={(h) => navigate(`/h/${h.id}`)}>
           {mode === 'heatmap' && stats.data && <Heat points={stats.data.heat} />}
         </MapView>
+        {mode === 'pins' && (
+          <div className="map-legend" aria-label={t('admin.legend')}>
+            {PIPELINE.map((s) => <span key={s}><i style={{ background: statusMeta(s).color }} />{t(`status.${s}`)}</span>)}
+          </div>
+        )}
       </div>
-    </div>
+    </>
   );
 }
