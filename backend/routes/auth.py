@@ -86,7 +86,7 @@ class UserOut(BaseModel):
 
 def _set_session(response: Response, request: Request, user: User) -> None:
     settings = request.app.state.settings
-    response.set_cookie(SESSION_COOKIE, create_session_token(user.id, settings.secret_key),
+    response.set_cookie(SESSION_COOKIE, create_session_token(user.id, settings.secret_key, user.session_version or 0),
                         max_age=SESSION_DAYS * 86400, httponly=True, samesite="lax",
                         secure=settings.secure_cookies, path="/")
 
@@ -115,6 +115,15 @@ def login(body: LoginIn, request: Request, response: Response, db: Session = Dep
 
 @router.post("/logout")
 def logout(response: Response):
+    response.delete_cookie(SESSION_COOKIE, path="/")
+    return {"ok": True}
+
+
+@router.post("/logout-all")
+def logout_all(response: Response, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """End every session of this account, on every device (e.g. after losing a phone)."""
+    user.session_version = (user.session_version or 0) + 1
+    db.commit()
     response.delete_cookie(SESSION_COOKIE, path="/")
     return {"ok": True}
 
@@ -177,6 +186,7 @@ def reset_password(body: ResetIn, request: Request, db: Session = Depends(get_db
     if not user or not user.is_active or not reset_token_matches(decoded[1], user.hashed_password):
         raise HTTPException(status_code=400, detail="invalid_or_expired_token")
     user.hashed_password = hash_password(body.new_password)
+    user.session_version = (user.session_version or 0) + 1  # sign out everywhere, including an attacker
     db.commit()
     return {"ok": True}
 
