@@ -110,7 +110,7 @@ test('officer marks a hazard fixed with a proof photo', async ({ browser }) => {
 
   const admin = await adminPage(browser);
   await admin.page.goto('/admin/queue');
-  const row = admin.page.getByRole('row').filter({ has: admin.page.getByRole('link', { name: String(id), exact: true }) });
+  const row = admin.page.locator(`tr[data-hazard-id="${id}"]`);
   await row.getByRole('button', { name: 'Update status' }).click();
   await admin.page.getByRole('button', { name: 'Fixed? Confirming' }).click();
   await admin.page.getByLabel('Photo of the repair').setInputFiles(PHOTO);
@@ -134,8 +134,9 @@ test('moderator rejects a pending report', async ({ browser }) => {
 
   const admin = await adminPage(browser);
   await admin.page.goto('/admin/moderation');
-  const card = admin.page.locator('.card').filter({ hasText: `#${id}` });
-  await card.getByRole('button', { name: 'Reject: Not a hazard' }).click();
+  const card = admin.page.locator(`[data-hazard-id="${id}"]`);
+  await card.locator('summary', { hasText: 'Reject' }).click();
+  await card.getByRole('menuitem', { name: 'Not a hazard' }).click();
   await expect(card).toHaveCount(0);
   await admin.page.goto(`/h/${id}`);
   await expect(admin.page.getByText('This report was closed by a moderator.')).toBeVisible();
